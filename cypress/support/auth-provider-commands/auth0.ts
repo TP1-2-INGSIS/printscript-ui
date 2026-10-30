@@ -13,6 +13,6 @@ export function loginViaAuth0Ui(username: string, password: string) {
     },
   );
 
-  // Ensure Auth0 has redirected us back to the RWA.
-  cy.url().should('equal', 'http://localhost:3000/');
+  // Ensure Auth0 has redirected us back to the application.
+  cy.url().should('include', Cypress.config('baseUrl') || 'http://localhost:5173');
 }

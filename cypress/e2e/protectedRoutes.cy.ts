@@ -1,33 +1,25 @@
 import { AUTH0_USERNAME, AUTH0_PASSWORD } from '../../src/utils/constants';
 
 describe('Protected routes test', () => {
-  it('should redirect to login when accessing a protected route unauthenticated', () => {
-    // Visit the protected route
+  it('should redirect to Auth0 login when accessing a protected route unauthenticated', () => {
     cy.visit('/');
 
-    cy.wait(1000);
-
-    // Check if the URL is redirected to the login page
-    cy.url().should('include', '/login');
+    // Verify redirection to Auth0 Universal Login domain
+    cy.url().should('match', /auth0\.com/);
   });
 
-  it('should display login content', () => {
-    // Visit the login page
-    cy.visit('/login');
+  it('should allow access and render navigation when authenticated', () => {
+    if (AUTH0_USERNAME && AUTH0_PASSWORD) {
+      cy.loginToAuth0(AUTH0_USERNAME, AUTH0_PASSWORD);
 
-    // Look for text that is likely to appear on a login page
-    cy.contains('Log in').should('exist');
-    cy.contains('Password').should('exist'); // Adjust the text based on actual content
-  });
+      cy.visit('/');
 
-  it('should not redirect to login when the user is already authenticated', () => {
-    cy.loginToAuth0(AUTH0_USERNAME, AUTH0_PASSWORD);
-
-    cy.visit('/');
-
-    cy.wait(1000);
-
-    // Check if the URL is redirected to the login page
-    cy.url().should('not.include', '/login');
+      // Should remain on the app and not redirect to Auth0
+      cy.url().should('not.match', /auth0\.com/);
+      cy.contains('Printscript').should('exist');
+      cy.get('[aria-label="Log out"]').should('exist');
+    } else {
+      cy.log('AUTH0_USERNAME and AUTH0_PASSWORD not provided, skipping live Auth0 login');
+    }
   });
 });
