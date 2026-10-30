@@ -12,8 +12,10 @@ const DELAY: number = 1000;
 
 export class FakeSnippetOperations implements SnippetOperations {
   private readonly fakeStore = new FakeSnippetStore();
+  protected readonly tokenProvider?: () => Promise<string>;
 
-  constructor() {
+  constructor(tokenProvider?: () => Promise<string>) {
+    this.tokenProvider = tokenProvider;
     autoBind(this);
   }
 

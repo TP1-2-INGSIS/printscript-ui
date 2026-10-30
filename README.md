@@ -68,6 +68,7 @@ This application uses https://www.npmjs.com/package/@auth0/auth0-react library f
 ```
 VITE_AUTH0_DOMAIN=<domain>
 VITE_AUTH0_CLIENT_ID=<client_id>
+VITE_AUTH0_AUDIENCE=<audience>
 ```
 
 If you get 401 loop when getting token:
@@ -89,7 +90,7 @@ If you get 401 loop when getting token:
 
 ## Tasks
 
-- [ ] Integrate Auth0 UI and private routes
+- [x] Integrate Auth0 UI and private routes
 - [ ] Integrate your endpoints to the UI (Create custom "SnippetOperations")
 - [ ] Dockerize
 - [ ] CI/CD
