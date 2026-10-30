@@ -1,4 +1,4 @@
 export type FileType = {
-    language: string;
-    extension: string;
-}
+  language: string;
+  extension: string;
+};

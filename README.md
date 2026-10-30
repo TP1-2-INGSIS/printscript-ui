@@ -21,12 +21,14 @@ To get a local copy up and running, follow these steps:
 git clone https://github.com/your-username/printscript-ui.git
 ```
 
-###  3. Navigate to the Project Directory
+### 3. Navigate to the Project Directory
+
 ```bash
 cd printscript-ui
 ```
 
 ### 4. Install Dependencies
+
 ```bash
 npm install
 ```
@@ -41,7 +43,7 @@ This will start the Vite development server. You can now open your browser and n
 
 ## Build production version
 
-To use this UI in production you should use an optimized and static version, this command will generate this version in `dist` directory:  
+To use this UI in production you should use an optimized and static version, this command will generate this version in `dist` directory:
 
 ```bash
 npm run build
@@ -49,7 +51,7 @@ npm run build
 
 ## Cypress
 
-To start cypress, make sure that the UI is running and enter: 
+To start cypress, make sure that the UI is running and enter:
 
 ```bash
 npm run cypress
@@ -58,17 +60,20 @@ npm run cypress
 ## Enable Auth0
 
 This application uses https://www.npmjs.com/package/@auth0/auth0-react library for Auth0 integration, to enable it you need to change:
-* Uncomment autologin in [App.tsx](src/App.tsx)
-* Uncomment token retrieval for operations [queries.tsx](src/utils/queries.tsx) 
-* Create a `.env` file with the required env vars:
+
+- Uncomment autologin in [App.tsx](src/App.tsx)
+- Uncomment token retrieval for operations [queries.tsx](src/utils/queries.tsx)
+- Create a `.env` file with the required env vars:
+
 ```
 VITE_AUTH0_DOMAIN=<domain>
 VITE_AUTH0_CLIENT_ID=<client_id>
 ```
 
 If you get 401 loop when getting token:
-* Change application type in Auth0 to "Regular Web Application"
-* In Application Settings > Credentials > "Authentication Method" select "None" 
+
+- Change application type in Auth0 to "Regular Web Application"
+- In Application Settings > Credentials > "Authentication Method" select "None"
 
 ## Start working
 
