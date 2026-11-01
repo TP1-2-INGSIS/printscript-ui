@@ -250,4 +250,73 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
 
     await expect(operations.listSnippetDescriptors()).rejects.toThrow('Internal Server Error');
   });
+
+  it('getFileTypes maps /languages to file types with extension', async () => {
+    server.use(
+      http.get(`${BASE_URL}/languages`, () => {
+        return HttpResponse.json([
+          { id: 'printscript', versions: ['1.0', '1.1'] },
+          { id: 'python', versions: ['3.12'] },
+        ]);
+      }),
+    );
+
+    const types = await operations.getFileTypes();
+
+    expect(types).toHaveLength(2);
+    expect(types[0]).toEqual({ language: 'printscript', extension: 'prs' });
+    expect(types[1]).toEqual({ language: 'python', extension: 'python' });
+  });
+
+  it('getUserFriends queries /users and maps to PaginatedUsers', async () => {
+    let capturedUrl: string | null = null;
+
+    server.use(
+      http.get(`${BASE_URL}/users`, ({ request }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json([
+          { id: 'user-1', name: 'Ana', email: 'ana@example.com' },
+          { id: 'user-2', name: '', email: 'juan@example.com' },
+        ]);
+      }),
+    );
+
+    const result = await operations.getUserFriends('an', 1, 5);
+
+    expect(capturedUrl).toContain('search=an');
+    expect(capturedUrl).toContain('limit=5');
+    expect(result.count).toBe(2);
+    expect(result.users[0]).toEqual({ id: 'user-1', name: 'Ana' });
+    expect(result.users[1]).toEqual({ id: 'user-2', name: 'juan@example.com' });
+  });
+
+  it('shareSnippet calls POST /snippets/{id}/share and returns updated snippet', async () => {
+    let capturedBody: unknown = null;
+
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-99/share`, async ({ request }) => {
+        capturedBody = await request.json();
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get(`${BASE_URL}/snippets/snippet-99`, () => {
+        return HttpResponse.json({
+          id: 'snippet-99',
+          name: 'Shared Script',
+          language: 'printscript',
+          version: '1.1',
+          content: 'println(42);',
+          ownerId: 'user-ana',
+          role: 'OWNER',
+          lintStatus: 'COMPLIANT',
+          sharedWith: ['user-juan'],
+        });
+      }),
+    );
+
+    const shared = await operations.shareSnippet('snippet-99', 'user-juan');
+
+    expect(capturedBody).toEqual({ userId: 'user-juan' });
+    expect(shared.id).toBe('snippet-99');
+    expect(shared.name).toBe('Shared Script');
+  });
 });

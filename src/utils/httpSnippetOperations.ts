@@ -55,6 +55,21 @@ export const BackendSnippetPageSchema = z.object({
 
 export type BackendSnippetPage = z.infer<typeof BackendSnippetPageSchema>;
 
+export const BackendLanguageInfoSchema = z.object({
+  id: z.string(),
+  versions: z.array(z.string()),
+});
+
+export type BackendLanguageInfo = z.infer<typeof BackendLanguageInfoSchema>;
+
+export const BackendUserSummarySchema = z.object({
+  id: z.string(),
+  name: z.string().optional().default(''),
+  email: z.string(),
+});
+
+export type BackendUserSummary = z.infer<typeof BackendUserSummarySchema>;
+
 const mapLintStatus = (status?: string): ComplianceEnum => {
   switch (status?.toUpperCase()) {
     case 'COMPLIANT':
@@ -250,12 +265,62 @@ export class HttpSnippetOperations implements SnippetOperations {
     return id;
   }
 
-  async getUserFriends(): Promise<PaginatedUsers> {
-    throw new Error('Method not implemented.');
+  async getFileTypes(): Promise<FileType[]> {
+    const languages = await this.request<BackendLanguageInfo[]>(
+      '/languages',
+      {
+        method: 'GET',
+      },
+      z.array(BackendLanguageInfoSchema),
+    );
+
+    return languages.map((lang) => ({
+      language: lang.id,
+      extension: lang.id === 'printscript' ? 'prs' : lang.id,
+    }));
   }
 
-  async shareSnippet(): Promise<Snippet> {
-    throw new Error('Method not implemented.');
+  async getUserFriends(
+    name: string = '',
+    page: number = 1,
+    pageSize: number = 10,
+  ): Promise<PaginatedUsers> {
+    const query = new URLSearchParams({
+      search: name,
+      limit: String(pageSize),
+    });
+
+    const users = await this.request<BackendUserSummary[]>(
+      `/users?${query.toString()}`,
+      {
+        method: 'GET',
+      },
+      z.array(BackendUserSummarySchema),
+    );
+
+    return {
+      page,
+      page_size: pageSize,
+      count: users.length,
+      users: users.map((u) => ({
+        id: u.id,
+        name: u.name || u.email,
+      })),
+    };
+  }
+
+  async shareSnippet(snippetId: string, userId: string): Promise<Snippet> {
+    await this.request<void>(`/snippets/${snippetId}/share`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+
+    const snippet = await this.getSnippetById(snippetId);
+    if (!snippet) {
+      throw new Error(`Snippet ${snippetId} not found after sharing`);
+    }
+
+    return snippet;
   }
 
   async getFormatRules(): Promise<Rule[]> {
@@ -283,10 +348,6 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async testSnippet(): Promise<TestCaseResult> {
-    throw new Error('Method not implemented.');
-  }
-
-  async getFileTypes(): Promise<FileType[]> {
     throw new Error('Method not implemented.');
   }
 
