@@ -79,6 +79,25 @@ export const BackendRuleConfigResponseSchema = z.object({
 
 export type BackendRuleConfigResponse = z.infer<typeof BackendRuleConfigResponseSchema>;
 
+export const BackendTestViewSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  inputs: z.array(z.string()).optional().default([]),
+  expectedOutputs: z.array(z.string()).optional().default([]),
+  lastStatus: z.string().optional().default('NOT_RUN'),
+});
+
+export type BackendTestView = z.infer<typeof BackendTestViewSchema>;
+
+export const BackendTestRunResultSchema = z.object({
+  testId: z.string(),
+  status: z.string(),
+  expectedOutputs: z.array(z.string()).optional().default([]),
+  actualOutputs: z.array(z.string()).optional().default([]),
+});
+
+export type BackendTestRunResult = z.infer<typeof BackendTestRunResultSchema>;
+
 const mapLintStatus = (status?: string): ComplianceEnum => {
   switch (status?.toUpperCase()) {
     case 'COMPLIANT':
@@ -163,10 +182,15 @@ const mapRulesToConfig = (rules: Rule[]): Record<string, unknown> => {
 export class HttpSnippetOperations implements SnippetOperations {
   private readonly baseUrl: string;
   private readonly tokenProvider?: TokenProvider;
+  private activeSnippetId?: string;
 
   constructor(baseUrl: string, tokenProvider?: TokenProvider) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.tokenProvider = tokenProvider;
+  }
+
+  setActiveSnippetId(snippetId?: string) {
+    this.activeSnippetId = snippetId;
   }
 
   private async request<T>(
@@ -260,6 +284,7 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async getSnippetById(id: string): Promise<Snippet | undefined> {
+    this.activeSnippetId = id;
     try {
       const detail = await this.request<BackendSnippetDetail>(
         `/snippets/${id}`,
@@ -429,15 +454,102 @@ export class HttpSnippetOperations implements SnippetOperations {
     return snippet;
   }
 
-  async getTestCases(): Promise<TestCase[]> {
-    throw new Error('Method not implemented.');
+  async getTestCases(snippetId?: string): Promise<TestCase[]> {
+    const targetId = snippetId || this.activeSnippetId;
+    if (!targetId) {
+      return [];
+    }
+
+    const views = await this.request<BackendTestView[]>(
+      `/snippets/${targetId}/tests`,
+      {
+        method: 'GET',
+      },
+      z.array(BackendTestViewSchema),
+    );
+
+    return views.map((view) => ({
+      id: view.id,
+      name: view.name,
+      input: view.inputs,
+      output: view.expectedOutputs,
+    }));
   }
 
-  async removeTestCase(): Promise<string> {
-    throw new Error('Method not implemented.');
+  async postTestCase(testCase: Partial<TestCase>, snippetId?: string): Promise<TestCase> {
+    const targetId = snippetId || this.activeSnippetId;
+    if (!targetId) {
+      throw new Error('Cannot save test case without active snippetId');
+    }
+
+    const payload = {
+      name: testCase.name ?? '',
+      inputs: testCase.input ?? [],
+      expectedOutputs: testCase.output ?? [],
+    };
+
+    if (testCase.id) {
+      const view = await this.request<BackendTestView>(
+        `/snippets/${targetId}/tests/${testCase.id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        },
+        BackendTestViewSchema,
+      );
+
+      return {
+        id: view.id,
+        name: view.name,
+        input: view.inputs,
+        output: view.expectedOutputs,
+      };
+    }
+
+    const view = await this.request<BackendTestView>(
+      `/snippets/${targetId}/tests`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      BackendTestViewSchema,
+    );
+
+    return {
+      id: view.id,
+      name: view.name,
+      input: view.inputs,
+      output: view.expectedOutputs,
+    };
   }
 
-  async testSnippet(): Promise<TestCaseResult> {
-    throw new Error('Method not implemented.');
+  async removeTestCase(id: string, snippetId?: string): Promise<string> {
+    const targetId = snippetId || this.activeSnippetId;
+    if (!targetId) {
+      throw new Error('Cannot remove test case without active snippetId');
+    }
+
+    await this.request<void>(`/snippets/${targetId}/tests/${id}`, {
+      method: 'DELETE',
+    });
+
+    return id;
+  }
+
+  async testSnippet(testCase: Partial<TestCase>, snippetId?: string): Promise<TestCaseResult> {
+    const targetId = snippetId || this.activeSnippetId;
+    if (!targetId || !testCase.id) {
+      return 'fail';
+    }
+
+    const result = await this.request<BackendTestRunResult>(
+      `/snippets/${targetId}/tests/${testCase.id}/run`,
+      {
+        method: 'POST',
+      },
+      BackendTestRunResultSchema,
+    );
+
+    return result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail';
   }
 }

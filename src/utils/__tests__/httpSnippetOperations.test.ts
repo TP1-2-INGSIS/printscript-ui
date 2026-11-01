@@ -440,4 +440,130 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     const formatted = await operations.formatSnippet('let a = 1;');
     expect(formatted).toBe('let a = 1;');
   });
+
+  it('getTestCases fetches tests for the active snippet', async () => {
+    operations.setActiveSnippetId('snippet-123');
+
+    server.use(
+      http.get(`${BASE_URL}/snippets/snippet-123/tests`, () => {
+        return HttpResponse.json([
+          {
+            id: 'test-1',
+            name: 'Test Positive',
+            inputs: ['1', '2'],
+            expectedOutputs: ['3'],
+            lastStatus: 'PASSED',
+          },
+        ]);
+      }),
+    );
+
+    const testCases = await operations.getTestCases();
+
+    expect(testCases).toHaveLength(1);
+    expect(testCases[0]).toEqual({
+      id: 'test-1',
+      name: 'Test Positive',
+      input: ['1', '2'],
+      output: ['3'],
+    });
+  });
+
+  it('postTestCase creates new test case when id is missing', async () => {
+    operations.setActiveSnippetId('snippet-123');
+    let capturedBody: unknown = null;
+
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-123/tests`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          id: 'test-new-1',
+          name: 'New Test',
+          inputs: ['4'],
+          expectedOutputs: ['16'],
+          lastStatus: 'NOT_RUN',
+        });
+      }),
+    );
+
+    const created = await operations.postTestCase({
+      name: 'New Test',
+      input: ['4'],
+      output: ['16'],
+    });
+
+    expect(capturedBody).toEqual({
+      name: 'New Test',
+      inputs: ['4'],
+      expectedOutputs: ['16'],
+    });
+    expect(created.id).toBe('test-new-1');
+  });
+
+  it('postTestCase updates existing test case when id is provided', async () => {
+    operations.setActiveSnippetId('snippet-123');
+    let capturedBody: unknown = null;
+
+    server.use(
+      http.put(`${BASE_URL}/snippets/snippet-123/tests/test-1`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          id: 'test-1',
+          name: 'Updated Test',
+          inputs: ['5'],
+          expectedOutputs: ['25'],
+          lastStatus: 'NOT_RUN',
+        });
+      }),
+    );
+
+    const updated = await operations.postTestCase({
+      id: 'test-1',
+      name: 'Updated Test',
+      input: ['5'],
+      output: ['25'],
+    });
+
+    expect(capturedBody).toEqual({
+      name: 'Updated Test',
+      inputs: ['5'],
+      expectedOutputs: ['25'],
+    });
+    expect(updated.name).toBe('Updated Test');
+  });
+
+  it('removeTestCase deletes test case by id', async () => {
+    operations.setActiveSnippetId('snippet-123');
+    let deleted = false;
+
+    server.use(
+      http.delete(`${BASE_URL}/snippets/snippet-123/tests/test-1`, () => {
+        deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const removedId = await operations.removeTestCase('test-1');
+
+    expect(deleted).toBe(true);
+    expect(removedId).toBe('test-1');
+  });
+
+  it('testSnippet runs test and returns success or fail', async () => {
+    operations.setActiveSnippetId('snippet-123');
+
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-123/tests/test-1/run`, () => {
+        return HttpResponse.json({
+          testId: 'test-1',
+          status: 'PASSED',
+          expectedOutputs: ['3'],
+          actualOutputs: ['3'],
+        });
+      }),
+    );
+
+    const result = await operations.testSnippet({ id: 'test-1' });
+    expect(result).toBe('success');
+  });
 });
