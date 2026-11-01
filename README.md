@@ -93,5 +93,5 @@ If you get 401 loop when getting token:
 - [x] Integrate Auth0 UI and private routes
 - [x] Integrate your endpoints to the UI (Create custom "SnippetOperations")
 - [x] Dockerize
-- [ ] CI/CD
+- [x] CI/CD
 - [ ] Sockets*
