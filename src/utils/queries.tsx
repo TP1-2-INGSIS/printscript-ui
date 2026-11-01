@@ -2,7 +2,9 @@ import { useMutation, UseMutationResult, useQuery } from 'react-query';
 import { CreateSnippet, PaginatedSnippets, Snippet, UpdateSnippet } from './snippet.ts';
 import { SnippetOperations } from './snippetOperations.ts';
 import { PaginatedUsers } from './users.ts';
-import { FakeSnippetOperations } from './mock/fakeSnippetOperations.ts';
+import { HttpSnippetOperations } from './httpSnippetOperations.ts';
+import { BACKEND_URL } from './constants.ts';
+import { useMemo } from 'react';
 import { TestCase } from '../types/TestCase.ts';
 import { FileType } from '../types/FileType.ts';
 import { Rule } from '../types/Rule.ts';
@@ -13,7 +15,10 @@ export type TokenProvider = () => Promise<string>;
 export const useSnippetsOperations = () => {
   const { getAccessTokenSilently } = useAuth0();
 
-  const snippetOperations: SnippetOperations = new FakeSnippetOperations(getAccessTokenSilently); // TODO: Replace with your implementation
+  const snippetOperations: SnippetOperations = useMemo(
+    () => new HttpSnippetOperations(BACKEND_URL, getAccessTokenSilently),
+    [getAccessTokenSilently],
+  );
 
   return snippetOperations;
 };

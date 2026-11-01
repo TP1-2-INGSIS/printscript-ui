@@ -74,7 +74,7 @@ export const BackendRuleConfigResponseSchema = z.object({
   language: z.string(),
   kind: z.string(),
   isDefault: z.boolean().optional(),
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 export type BackendRuleConfigResponse = z.infer<typeof BackendRuleConfigResponseSchema>;
@@ -185,7 +185,7 @@ export class HttpSnippetOperations implements SnippetOperations {
   private activeSnippetId?: string;
 
   constructor(baseUrl: string, tokenProvider?: TokenProvider) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.baseUrl = (baseUrl || 'http://localhost:8080/api').replace(/\/+$/, '');
     this.tokenProvider = tokenProvider;
   }
 
@@ -198,7 +198,9 @@ export class HttpSnippetOperations implements SnippetOperations {
     options: RequestInit = {},
     schema?: z.ZodSchema<T>,
   ): Promise<T> {
-    const url = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const cleanBase =
+      this.baseUrl && this.baseUrl !== 'undefined' ? this.baseUrl : 'http://localhost:8080/api';
+    const url = cleanBase + (path.startsWith('/') ? path : '/' + path);
     const headers = new Headers(options.headers || {});
 
     if (this.tokenProvider) {
