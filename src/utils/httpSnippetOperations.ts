@@ -70,6 +70,15 @@ export const BackendUserSummarySchema = z.object({
 
 export type BackendUserSummary = z.infer<typeof BackendUserSummarySchema>;
 
+export const BackendRuleConfigResponseSchema = z.object({
+  language: z.string(),
+  kind: z.string(),
+  isDefault: z.boolean().optional(),
+  config: z.record(z.unknown()),
+});
+
+export type BackendRuleConfigResponse = z.infer<typeof BackendRuleConfigResponseSchema>;
+
 const mapLintStatus = (status?: string): ComplianceEnum => {
   switch (status?.toUpperCase()) {
     case 'COMPLIANT':
@@ -103,6 +112,53 @@ const mapDetailToSnippet = (detail: BackendSnippetDetail): Snippet => ({
   compliance: mapLintStatus(detail.lintStatus),
   author: detail.ownerId,
 });
+
+const mapConfigToRules = (config: Record<string, unknown>): Rule[] => {
+  return Object.entries(config).map(([name, value], index) => {
+    const isActive = value !== null && value !== undefined && value !== false;
+    let ruleValue: string | number | null = null;
+
+    if (typeof value === 'number') {
+      ruleValue = value;
+    } else if (typeof value === 'string') {
+      ruleValue = value;
+    } else if (typeof value === 'boolean') {
+      ruleValue = null;
+    } else if (value !== null && value !== undefined) {
+      ruleValue = JSON.stringify(value);
+    }
+
+    return {
+      id: String(index + 1),
+      name,
+      isActive,
+      value: ruleValue,
+    };
+  });
+};
+
+const mapRulesToConfig = (rules: Rule[]): Record<string, unknown> => {
+  const config: Record<string, unknown> = {};
+
+  for (const rule of rules) {
+    if (!rule.isActive) {
+      config[rule.name] = false;
+      continue;
+    }
+
+    if (rule.value === null || rule.value === undefined || rule.value === '') {
+      config[rule.name] = true;
+    } else if (typeof rule.value === 'number') {
+      config[rule.name] = rule.value;
+    } else if (!isNaN(Number(rule.value)) && !isNaN(parseFloat(String(rule.value)))) {
+      config[rule.name] = Number(rule.value);
+    } else {
+      config[rule.name] = rule.value;
+    }
+  }
+
+  return config;
+};
 
 export class HttpSnippetOperations implements SnippetOperations {
   private readonly baseUrl: string;
@@ -324,22 +380,56 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async getFormatRules(): Promise<Rule[]> {
-    throw new Error('Method not implemented.');
+    const response = await this.request<BackendRuleConfigResponse>(
+      '/rules/printscript/format',
+      {
+        method: 'GET',
+      },
+      BackendRuleConfigResponseSchema,
+    );
+
+    return mapConfigToRules(response.config || {});
+  }
+
+  async modifyFormatRule(newRules: Rule[]): Promise<Rule[]> {
+    const config = mapRulesToConfig(newRules);
+
+    await this.request<unknown>('/rules/printscript/format', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+
+    return newRules;
   }
 
   async getLintingRules(): Promise<Rule[]> {
-    throw new Error('Method not implemented.');
+    const response = await this.request<BackendRuleConfigResponse>(
+      '/rules/printscript/lint',
+      {
+        method: 'GET',
+      },
+      BackendRuleConfigResponseSchema,
+    );
+
+    return mapConfigToRules(response.config || {});
+  }
+
+  async modifyLintingRule(newRules: Rule[]): Promise<Rule[]> {
+    const config = mapRulesToConfig(newRules);
+
+    await this.request<unknown>('/rules/printscript/lint', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+
+    return newRules;
+  }
+
+  async formatSnippet(snippet: string): Promise<string> {
+    return snippet;
   }
 
   async getTestCases(): Promise<TestCase[]> {
-    throw new Error('Method not implemented.');
-  }
-
-  async formatSnippet(): Promise<string> {
-    throw new Error('Method not implemented.');
-  }
-
-  async postTestCase(): Promise<TestCase> {
     throw new Error('Method not implemented.');
   }
 
@@ -348,14 +438,6 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async testSnippet(): Promise<TestCaseResult> {
-    throw new Error('Method not implemented.');
-  }
-
-  async modifyFormatRule(): Promise<Rule[]> {
-    throw new Error('Method not implemented.');
-  }
-
-  async modifyLintingRule(): Promise<Rule[]> {
     throw new Error('Method not implemented.');
   }
 }

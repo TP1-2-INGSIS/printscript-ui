@@ -319,4 +319,125 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(shared.id).toBe('snippet-99');
     expect(shared.name).toBe('Shared Script');
   });
+
+  it('getFormatRules queries /rules/printscript/format and maps config to Rule[]', async () => {
+    server.use(
+      http.get(`${BASE_URL}/rules/printscript/format`, () => {
+        return HttpResponse.json({
+          language: 'printscript',
+          kind: 'FORMAT',
+          isDefault: true,
+          config: {
+            indentSize: 4,
+            enforceSpacing: true,
+          },
+        });
+      }),
+    );
+
+    const rules = await operations.getFormatRules();
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toEqual({
+      id: '1',
+      name: 'indentSize',
+      isActive: true,
+      value: 4,
+    });
+    expect(rules[1]).toEqual({
+      id: '2',
+      name: 'enforceSpacing',
+      isActive: true,
+      value: null,
+    });
+  });
+
+  it('modifyFormatRule sends PUT /rules/printscript/format with transformed config', async () => {
+    let capturedBody: unknown = null;
+
+    server.use(
+      http.put(`${BASE_URL}/rules/printscript/format`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          language: 'printscript',
+          kind: 'FORMAT',
+          config: { indentSize: 2 },
+          processed: 1,
+          failed: 0,
+        });
+      }),
+    );
+
+    const newRules = [
+      { id: '1', name: 'indentSize', isActive: true, value: 2 },
+      { id: '2', name: 'disabledRule', isActive: false, value: null },
+    ];
+
+    const result = await operations.modifyFormatRule(newRules);
+
+    expect(capturedBody).toEqual({
+      config: {
+        indentSize: 2,
+        disabledRule: false,
+      },
+    });
+    expect(result).toEqual(newRules);
+  });
+
+  it('getLintingRules queries /rules/printscript/lint and maps config to Rule[]', async () => {
+    server.use(
+      http.get(`${BASE_URL}/rules/printscript/lint`, () => {
+        return HttpResponse.json({
+          language: 'printscript',
+          kind: 'LINT',
+          config: {
+            identifierFormat: 'snake case',
+          },
+        });
+      }),
+    );
+
+    const rules = await operations.getLintingRules();
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toEqual({
+      id: '1',
+      name: 'identifierFormat',
+      isActive: true,
+      value: 'snake case',
+    });
+  });
+
+  it('modifyLintingRule sends PUT /rules/printscript/lint with updated config', async () => {
+    let capturedBody: unknown = null;
+
+    server.use(
+      http.put(`${BASE_URL}/rules/printscript/lint`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          language: 'printscript',
+          kind: 'LINT',
+          config: { identifierFormat: 'camelCase' },
+          processed: 1,
+          failed: 0,
+        });
+      }),
+    );
+
+    const newRules = [{ id: '1', name: 'identifierFormat', isActive: true, value: 'camelCase' }];
+
+    const result = await operations.modifyLintingRule(newRules);
+
+    expect(capturedBody).toEqual({
+      config: {
+        identifierFormat: 'camelCase',
+      },
+    });
+    expect(result).toEqual(newRules);
+  });
+
+  it('formatSnippet returns snippet string content', async () => {
+    const formatted = await operations.formatSnippet('let a = 1;');
+    expect(formatted).toBe('let a = 1;');
+  });
 });
