@@ -566,4 +566,76 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     const result = await operations.testSnippet({ id: 'test-1' });
     expect(result).toBe('success');
   });
+
+  it('removeTestCase throws when no snippetId is provided or active', async () => {
+    const unattachedOps = new HttpSnippetOperations(BASE_URL, async () => 'token');
+    await expect(unattachedOps.removeTestCase('test-1')).rejects.toThrow(
+      'Cannot remove test case without active snippetId',
+    );
+  });
+
+  it('testSnippet returns fail when no snippetId or testCase.id is provided', async () => {
+    const unattachedOps = new HttpSnippetOperations(BASE_URL, async () => 'token');
+    const result1 = await unattachedOps.testSnippet({ id: 'test-1' });
+    expect(result1).toBe('fail');
+
+    operations.setActiveSnippetId('snippet-123');
+    const result2 = await operations.testSnippet({});
+    expect(result2).toBe('fail');
+  });
+
+  it('getTestCases returns empty array when no snippetId is active or provided', async () => {
+    const unattachedOps = new HttpSnippetOperations(BASE_URL, async () => 'token');
+    const tests = await unattachedOps.getTestCases();
+    expect(tests).toEqual([]);
+  });
+
+  it('postTestCase throws when no snippetId is active or provided', async () => {
+    const unattachedOps = new HttpSnippetOperations(BASE_URL, async () => 'token');
+    await expect(unattachedOps.postTestCase({ name: 'Fail' })).rejects.toThrow(
+      'Cannot save test case without active snippetId',
+    );
+  });
+
+  it('testSnippet returns fail when backend test run fails', async () => {
+    operations.setActiveSnippetId('snippet-123');
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-123/tests/test-fail/run`, () => {
+        return HttpResponse.json({
+          testId: 'test-fail',
+          status: 'FAILED',
+          expectedOutputs: ['1'],
+          actualOutputs: ['2'],
+        });
+      }),
+    );
+
+    const result = await operations.testSnippet({ id: 'test-fail' });
+    expect(result).toBe('fail');
+  });
+
+  it('getSnippetById rethrows non-404 errors', async () => {
+    server.use(
+      http.get(`${BASE_URL}/snippets/snippet-500`, () => {
+        return HttpResponse.json({ message: 'Internal crash' }, { status: 500 });
+      }),
+    );
+
+    await expect(operations.getSnippetById('snippet-500')).rejects.toThrow('Internal crash');
+  });
+
+  it('shareSnippet throws if snippet is not found after sharing', async () => {
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-ghost/share`, () => {
+        return HttpResponse.json({ success: true });
+      }),
+      http.get(`${BASE_URL}/snippets/snippet-ghost`, () => {
+        return HttpResponse.json({ message: 'Not found' }, { status: 404 });
+      }),
+    );
+
+    await expect(operations.shareSnippet('snippet-ghost', 'user-2')).rejects.toThrow(
+      'Snippet snippet-ghost not found after sharing',
+    );
+  });
 });

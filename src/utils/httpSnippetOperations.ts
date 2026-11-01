@@ -179,6 +179,16 @@ const mapRulesToConfig = (rules: Rule[]): Record<string, unknown> => {
   return config;
 };
 
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 export class HttpSnippetOperations implements SnippetOperations {
   private readonly baseUrl: string;
   private readonly tokenProvider?: TokenProvider;
@@ -231,7 +241,7 @@ export class HttpSnippetOperations implements SnippetOperations {
       } catch {
         // Ignora falla de parsing del body si no es JSON
       }
-      throw new Error(errorMessage);
+      throw new HttpError(response.status, errorMessage);
     }
 
     if (response.status === 204) {
@@ -297,7 +307,10 @@ export class HttpSnippetOperations implements SnippetOperations {
       );
       return mapDetailToSnippet(detail);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('404')) {
+      if (
+        (error instanceof HttpError && error.status === 404) ||
+        (error instanceof Error && error.message.includes('404'))
+      ) {
         return undefined;
       }
       throw error;

@@ -26,6 +26,14 @@ export default defineConfig(({ mode }) => {
           '**/*.d.ts',
           'src/utils/mock/**',
         ],
+        thresholds: {
+          'src/utils/httpSnippetOperations.ts': {
+            lines: 80,
+            functions: 80,
+            branches: 80,
+            statements: 80,
+          },
+        },
       },
     },
   };
