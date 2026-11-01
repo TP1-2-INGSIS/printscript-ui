@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   ComplianceEnum,
   CreateSnippet,
@@ -14,31 +15,45 @@ import { Rule } from '../types/Rule';
 
 export type TokenProvider = () => Promise<string>;
 
-export interface BackendSnippetSummary {
-  id: string;
-  name: string;
-  language: string;
-  version: string;
-  ownerId: string;
-  role: string;
-  lintStatus?: string;
-  updatedAt?: string;
-}
+export const BackendSnippetSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  language: z.string(),
+  version: z.string().optional().default('1.1'),
+  ownerId: z.string(),
+  role: z.string().optional().default('OWNER'),
+  lintStatus: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
 
-export interface BackendSnippetDetail extends BackendSnippetSummary {
-  content: string;
-  description?: string;
-  lintViolations?: Array<{ line: number; column: number; message: string }>;
-  sharedWith?: string[];
-  createdAt?: string;
-}
+export type BackendSnippetSummary = z.infer<typeof BackendSnippetSummarySchema>;
 
-export interface BackendSnippetPage {
-  items: BackendSnippetSummary[];
-  page: number;
-  size: number;
-  total: number;
-}
+export const BackendSnippetDetailSchema = BackendSnippetSummarySchema.extend({
+  content: z.string(),
+  description: z.string().nullable().optional(),
+  lintViolations: z
+    .array(
+      z.object({
+        line: z.number(),
+        column: z.number(),
+        message: z.string(),
+      }),
+    )
+    .optional(),
+  sharedWith: z.array(z.string()).nullable().optional(),
+  createdAt: z.string().optional(),
+});
+
+export type BackendSnippetDetail = z.infer<typeof BackendSnippetDetailSchema>;
+
+export const BackendSnippetPageSchema = z.object({
+  items: z.array(BackendSnippetSummarySchema),
+  page: z.number(),
+  size: z.number(),
+  total: z.number(),
+});
+
+export type BackendSnippetPage = z.infer<typeof BackendSnippetPageSchema>;
 
 const mapLintStatus = (status?: string): ComplianceEnum => {
   switch (status?.toUpperCase()) {
@@ -83,7 +98,11 @@ export class HttpSnippetOperations implements SnippetOperations {
     this.tokenProvider = tokenProvider;
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    options: RequestInit = {},
+    schema?: z.ZodSchema<T>,
+  ): Promise<T> {
     const url = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
     const headers = new Headers(options.headers || {});
 
@@ -122,7 +141,21 @@ export class HttpSnippetOperations implements SnippetOperations {
       return undefined as unknown as T;
     }
 
-    return response.json() as Promise<T>;
+    const rawData: unknown = await response.json();
+
+    if (schema) {
+      const parseResult = schema.safeParse(rawData);
+      if (!parseResult.success) {
+        throw new Error(
+          `Contract validation failed: Backend response does not match expected schema. Errors: ${JSON.stringify(
+            parseResult.error.format(),
+          )}`,
+        );
+      }
+      return parseResult.data;
+    }
+
+    return rawData as T;
   }
 
   async listSnippetDescriptors(
@@ -139,9 +172,13 @@ export class HttpSnippetOperations implements SnippetOperations {
       query.set('name', snippetName);
     }
 
-    const data = await this.request<BackendSnippetPage>(`/snippets?${query.toString()}`, {
-      method: 'GET',
-    });
+    const data = await this.request<BackendSnippetPage>(
+      `/snippets?${query.toString()}`,
+      {
+        method: 'GET',
+      },
+      BackendSnippetPageSchema,
+    );
 
     return {
       page: data.page,
@@ -153,9 +190,13 @@ export class HttpSnippetOperations implements SnippetOperations {
 
   async getSnippetById(id: string): Promise<Snippet | undefined> {
     try {
-      const detail = await this.request<BackendSnippetDetail>(`/snippets/${id}`, {
-        method: 'GET',
-      });
+      const detail = await this.request<BackendSnippetDetail>(
+        `/snippets/${id}`,
+        {
+          method: 'GET',
+        },
+        BackendSnippetDetailSchema,
+      );
       return mapDetailToSnippet(detail);
     } catch (error) {
       if (error instanceof Error && error.message.includes('404')) {
@@ -173,10 +214,14 @@ export class HttpSnippetOperations implements SnippetOperations {
       version: '1.1',
     };
 
-    const detail = await this.request<BackendSnippetDetail>('/snippets', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const detail = await this.request<BackendSnippetDetail>(
+      '/snippets',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      BackendSnippetDetailSchema,
+    );
 
     return mapDetailToSnippet(detail);
   }
@@ -186,10 +231,14 @@ export class HttpSnippetOperations implements SnippetOperations {
       content: updateSnippet.content,
     };
 
-    const detail = await this.request<BackendSnippetDetail>(`/snippets/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
+    const detail = await this.request<BackendSnippetDetail>(
+      `/snippets/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+      BackendSnippetDetailSchema,
+    );
 
     return mapDetailToSnippet(detail);
   }
@@ -201,7 +250,6 @@ export class HttpSnippetOperations implements SnippetOperations {
     return id;
   }
 
-  // Métodos de fases siguientes pendientes de implementar
   async getUserFriends(): Promise<PaginatedUsers> {
     throw new Error('Method not implemented.');
   }

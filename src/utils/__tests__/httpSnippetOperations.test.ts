@@ -85,6 +85,29 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(result.snippets[1].author).toBe('user-juan');
   });
 
+  it('fails fast when backend breaks schema contract in listSnippetDescriptors', async () => {
+    server.use(
+      http.get(`${BASE_URL}/snippets`, () => {
+        // Backend devuelve datos corruptos o campos renombrados (ej. falta ownerId)
+        return HttpResponse.json({
+          items: [
+            {
+              id: 'snippet-broken',
+              name: 'Missing Owner',
+              language: 'printscript',
+              // ownerId falta a propósito
+            },
+          ],
+          page: 0,
+          size: 10,
+          total: 1,
+        });
+      }),
+    );
+
+    await expect(operations.listSnippetDescriptors()).rejects.toThrow(/Contract validation failed/);
+  });
+
   it('getSnippetById retrieves snippet detail with content', async () => {
     server.use(
       http.get(`${BASE_URL}/snippets/snippet-123`, () => {
