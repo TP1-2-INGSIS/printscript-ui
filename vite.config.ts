@@ -18,14 +18,7 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html', 'lcov'],
-        exclude: [
-          'node_modules/',
-          'dist/',
-          'cypress/',
-          'src/setupTests.ts',
-          '**/*.d.ts',
-          'src/utils/mock/**',
-        ],
+        exclude: ['node_modules/', 'dist/', 'cypress/', 'src/setupTests.ts', '**/*.d.ts'],
         thresholds: {
           'src/utils/httpSnippetOperations.ts': {
             lines: 80,

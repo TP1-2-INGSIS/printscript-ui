@@ -1,8 +1,16 @@
 import { BACKEND_URL } from '../../src/utils/constants';
-import { FakeSnippetStore } from '../../src/utils/mock/fakeSnippetStore';
+
+const mockSnippet = {
+  id: '1',
+  name: 'Cool Snippet',
+  content: 'let a : number = 5;\nlet b : number = 5;\n\nprintln(a + b);',
+  compliance: 'failed',
+  author: 'John Doe',
+  language: 'printscript',
+  extension: 'prs',
+};
 
 describe('Add snippet tests', () => {
-  const fakeStore = new FakeSnippetStore();
   beforeEach(() => {
     // cy.loginToAuth0(
     //     AUTH0_USERNAME,
@@ -10,7 +18,7 @@ describe('Add snippet tests', () => {
     // )
     cy.intercept('GET', BACKEND_URL + '/snippets/*', {
       statusCode: 201,
-      body: fakeStore.getSnippetById('1'),
+      body: mockSnippet,
     }).as('getSnippetById');
     cy.intercept('GET', BACKEND_URL + '/snippets').as('getSnippets');
 
