@@ -6,7 +6,7 @@ import {
   Snippet,
   UpdateSnippet,
 } from './snippet';
-import { SnippetOperations } from './snippetOperations';
+import { SnippetFilterOptions, SnippetOperations } from './snippetOperations';
 import { PaginatedUsers } from './users';
 import { TestCase } from '../types/TestCase';
 import { TestCaseResult } from './queries';
@@ -31,14 +31,17 @@ export type BackendSnippetSummary = z.infer<typeof BackendSnippetSummarySchema>;
 export const BackendSnippetDetailSchema = BackendSnippetSummarySchema.extend({
   content: z.string(),
   description: z.string().nullable().optional(),
+  version: z.string().optional(),
   lintViolations: z
     .array(
       z.object({
-        line: z.number(),
-        column: z.number(),
-        message: z.string(),
+        rule: z.string().optional().default('lint'),
+        message: z.string().optional().default(''),
+        line: z.number().nullable().optional(),
+        column: z.number().nullable().optional(),
       }),
     )
+    .nullable()
     .optional(),
   sharedWith: z.array(z.string()).nullable().optional(),
   createdAt: z.string().optional(),
@@ -125,11 +128,19 @@ const mapSummaryToSnippet = (summary: BackendSnippetSummary): Snippet => ({
 const mapDetailToSnippet = (detail: BackendSnippetDetail): Snippet => ({
   id: detail.id,
   name: detail.name,
+  description: detail.description,
+  version: detail.version,
   language: detail.language,
   extension: detail.language === 'printscript' ? 'prs' : detail.language,
   content: detail.content ?? '',
   compliance: mapLintStatus(detail.lintStatus),
   author: detail.ownerId,
+  lintViolations: (detail.lintViolations || []).map((v) => ({
+    rule: v.rule || 'lint',
+    message: v.message || '',
+    line: v.line,
+    column: v.column,
+  })),
 });
 
 const mapConfigToRules = (config: Record<string, unknown>): Rule[] => {
@@ -179,15 +190,39 @@ const mapRulesToConfig = (rules: Rule[]): Record<string, unknown> => {
   return config;
 };
 
+export type ErrorDetail = {
+  rule?: string;
+  message?: string;
+  line?: number | null;
+  column?: number | null;
+  field?: string;
+};
+
 export class HttpError extends Error {
   readonly status: number;
+  readonly code?: string;
+  readonly details?: ErrorDetail[];
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string, details?: ErrorDetail[]) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
+
+export const triggerBlobDownload = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
 
 export class HttpSnippetOperations implements SnippetOperations {
   private readonly baseUrl: string;
@@ -231,17 +266,27 @@ export class HttpSnippetOperations implements SnippetOperations {
 
     if (!response.ok) {
       let errorMessage = `Request failed with status ${response.status}`;
+      let errorCode: string | undefined;
+      let errorDetails: ErrorDetail[] | undefined;
       try {
         const errorBody = await response.json();
-        if (errorBody && typeof errorBody === 'object' && 'message' in errorBody) {
-          errorMessage = String(errorBody.message);
-        } else if (errorBody && typeof errorBody === 'object' && 'error' in errorBody) {
-          errorMessage = String(errorBody.error);
+        if (errorBody && typeof errorBody === 'object') {
+          if ('message' in errorBody && typeof errorBody.message === 'string') {
+            errorMessage = errorBody.message;
+          } else if ('error' in errorBody && typeof errorBody.error === 'string') {
+            errorMessage = errorBody.error;
+          }
+          if ('code' in errorBody && typeof errorBody.code === 'string') {
+            errorCode = errorBody.code;
+          }
+          if ('details' in errorBody && Array.isArray(errorBody.details)) {
+            errorDetails = errorBody.details as ErrorDetail[];
+          }
         }
       } catch {
         // Ignora falla de parsing del body si no es JSON
       }
-      throw new HttpError(response.status, errorMessage);
+      throw new HttpError(response.status, errorMessage, errorCode, errorDetails);
     }
 
     if (response.status === 204) {
@@ -268,15 +313,26 @@ export class HttpSnippetOperations implements SnippetOperations {
   async listSnippetDescriptors(
     page: number = 0,
     pageSize: number = 10,
-    snippetName?: string,
+    filterOrName?: string | SnippetFilterOptions,
   ): Promise<PaginatedSnippets> {
     const query = new URLSearchParams({
       page: String(page),
       size: String(pageSize),
     });
 
-    if (snippetName) {
-      query.set('name', snippetName);
+    if (typeof filterOrName === 'string') {
+      if (filterOrName) {
+        query.set('name', filterOrName);
+      }
+    } else if (filterOrName) {
+      if (filterOrName.name) query.set('name', filterOrName.name);
+      if (filterOrName.relation && filterOrName.relation !== 'ALL') {
+        query.set('relation', filterOrName.relation);
+      }
+      if (filterOrName.language) query.set('language', filterOrName.language);
+      if (filterOrName.lintStatus) query.set('lintStatus', filterOrName.lintStatus);
+      if (filterOrName.sort) query.set('sort', filterOrName.sort);
+      if (filterOrName.order) query.set('order', filterOrName.order);
     }
 
     const data = await this.request<BackendSnippetPage>(
@@ -318,12 +374,15 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async createSnippet(createSnippet: CreateSnippet): Promise<Snippet> {
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: createSnippet.name,
       content: createSnippet.content,
       language: createSnippet.language || 'printscript',
-      version: '1.1',
+      version: createSnippet.version || '1.1',
     };
+    if (createSnippet.description !== undefined) {
+      payload.description = createSnippet.description;
+    }
 
     const detail = await this.request<BackendSnippetDetail>(
       '/snippets',
@@ -338,9 +397,11 @@ export class HttpSnippetOperations implements SnippetOperations {
   }
 
   async updateSnippetById(id: string, updateSnippet: UpdateSnippet): Promise<Snippet> {
-    const payload = {
-      content: updateSnippet.content,
-    };
+    const payload: Record<string, unknown> = {};
+    if (updateSnippet.content !== undefined) payload.content = updateSnippet.content;
+    if (updateSnippet.name !== undefined) payload.name = updateSnippet.name;
+    if (updateSnippet.description !== undefined) payload.description = updateSnippet.description;
+    if (updateSnippet.version !== undefined) payload.version = updateSnippet.version;
 
     const detail = await this.request<BackendSnippetDetail>(
       `/snippets/${id}`,
@@ -361,6 +422,53 @@ export class HttpSnippetOperations implements SnippetOperations {
     return id;
   }
 
+  async downloadSnippet(
+    id: string,
+    formatted: boolean = false,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const cleanBase =
+      this.baseUrl && this.baseUrl !== 'undefined' ? this.baseUrl : 'http://localhost:8080/api';
+    const url = `${cleanBase}/snippets/${id}/download?formatted=${formatted}`;
+    const headers = new Headers();
+
+    if (this.tokenProvider) {
+      const token = await this.tokenProvider();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Download failed with status ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody && typeof errorBody === 'object' && 'message' in errorBody) {
+          errorMessage = String(errorBody.message);
+        }
+      } catch {
+        // Ignora falla de parsing del body si no es JSON
+      }
+      throw new HttpError(response.status, errorMessage);
+    }
+
+    const disposition = response.headers.get('content-disposition');
+    let filename = `snippet-${id}.txt`;
+    if (disposition) {
+      const match = disposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;\r\n"']*)['"]?/i);
+      if (match && match[1]) {
+        filename = match[1].trim();
+      }
+    }
+
+    const blob = await response.blob();
+    return { blob, filename };
+  }
+
   async getFileTypes(): Promise<FileType[]> {
     const languages = await this.request<BackendLanguageInfo[]>(
       '/languages',
@@ -373,6 +481,7 @@ export class HttpSnippetOperations implements SnippetOperations {
     return languages.map((lang) => ({
       language: lang.id,
       extension: lang.id === 'printscript' ? 'prs' : lang.id,
+      versions: lang.versions || [],
     }));
   }
 
