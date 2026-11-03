@@ -5,11 +5,20 @@ import { TestCaseResult } from './queries.tsx';
 import { FileType } from '../types/FileType.ts';
 import { Rule } from '../types/Rule.ts';
 
+export type SnippetFilterOptions = {
+  name?: string;
+  relation?: 'ALL' | 'OWNED' | 'SHARED';
+  language?: string;
+  lintStatus?: 'COMPLIANT' | 'NON_COMPLIANT' | 'PENDING' | 'FAILED';
+  sort?: 'name' | 'language' | 'lintStatus' | 'updatedAt';
+  order?: 'asc' | 'desc';
+};
+
 export interface SnippetOperations {
   listSnippetDescriptors(
     page: number,
     pageSize: number,
-    sippetName?: string,
+    filterOrName?: string | SnippetFilterOptions,
   ): Promise<PaginatedSnippets>;
 
   createSnippet(createSnippet: CreateSnippet): Promise<Snippet>;

@@ -16,8 +16,17 @@ export type UpdateSnippet = {
   content: string;
 };
 
+export type LintViolation = {
+  rule: string;
+  message: string;
+  line?: number | null;
+  column?: number | null;
+};
+
 export type Snippet = CreateSnippet & {
   id: string;
+  description?: string | null;
+  lintViolations?: LintViolation[];
 } & SnippetStatus;
 
 type SnippetStatus = {

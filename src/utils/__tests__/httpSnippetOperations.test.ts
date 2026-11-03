@@ -85,6 +85,40 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(result.snippets[1].author).toBe('user-juan');
   });
 
+  it('listSnippetDescriptors maps filter options to query params', async () => {
+    let capturedUrl: string | null = null;
+
+    server.use(
+      http.get(`${BASE_URL}/snippets`, ({ request }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({
+          items: [],
+          page: 1,
+          size: 20,
+          total: 0,
+        });
+      }),
+    );
+
+    await operations.listSnippetDescriptors(1, 20, {
+      name: 'fibonacci',
+      relation: 'OWNED',
+      language: 'printscript',
+      lintStatus: 'COMPLIANT',
+      sort: 'updatedAt',
+      order: 'desc',
+    });
+
+    expect(capturedUrl).toContain('page=1');
+    expect(capturedUrl).toContain('size=20');
+    expect(capturedUrl).toContain('name=fibonacci');
+    expect(capturedUrl).toContain('relation=OWNED');
+    expect(capturedUrl).toContain('language=printscript');
+    expect(capturedUrl).toContain('lintStatus=COMPLIANT');
+    expect(capturedUrl).toContain('sort=updatedAt');
+    expect(capturedUrl).toContain('order=desc');
+  });
+
   it('fails fast when backend breaks schema contract in listSnippetDescriptors', async () => {
     server.use(
       http.get(`${BASE_URL}/snippets`, () => {
@@ -133,6 +167,48 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(snippet?.name).toBe('Calculation');
     expect(snippet?.content).toBe('let a: number = 5;\nprintln(a);');
     expect(snippet?.compliance).toBe('compliant');
+    expect(snippet?.lintViolations).toEqual([]);
+  });
+
+  it('getSnippetById maps description and lintViolations correctly', async () => {
+    server.use(
+      http.get(`${BASE_URL}/snippets/snippet-with-violations`, () => {
+        return HttpResponse.json({
+          id: 'snippet-with-violations',
+          name: 'Calculation with lint issue',
+          description: 'A test calculation',
+          language: 'printscript',
+          version: '1.1',
+          content: 'let a = 5;',
+          ownerId: 'user-ana',
+          role: 'OWNER',
+          lintStatus: 'NON_COMPLIANT',
+          lintViolations: [
+            {
+              rule: 'camel-case-rule',
+              message: 'Variable should be camelCase',
+              line: 1,
+              column: 5,
+            },
+          ],
+          createdAt: '2026-11-01T10:00:00Z',
+          updatedAt: '2026-11-01T10:00:00Z',
+        });
+      }),
+    );
+
+    const snippet = await operations.getSnippetById('snippet-with-violations');
+
+    expect(snippet).toBeDefined();
+    expect(snippet?.description).toBe('A test calculation');
+    expect(snippet?.compliance).toBe('not-compliant');
+    expect(snippet?.lintViolations).toHaveLength(1);
+    expect(snippet?.lintViolations?.[0]).toEqual({
+      rule: 'camel-case-rule',
+      message: 'Variable should be camelCase',
+      line: 1,
+      column: 5,
+    });
   });
 
   it('getSnippetById returns undefined when backend responds 404', async () => {

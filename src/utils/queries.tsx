@@ -1,6 +1,6 @@
 import { useMutation, UseMutationResult, useQuery } from 'react-query';
 import { CreateSnippet, PaginatedSnippets, Snippet, UpdateSnippet } from './snippet.ts';
-import { SnippetOperations } from './snippetOperations.ts';
+import { SnippetFilterOptions, SnippetOperations } from './snippetOperations.ts';
 import { PaginatedUsers } from './users.ts';
 import { HttpSnippetOperations } from './httpSnippetOperations.ts';
 import { BACKEND_URL } from './constants.ts';
@@ -23,11 +23,15 @@ export const useSnippetsOperations = () => {
   return snippetOperations;
 };
 
-export const useGetSnippets = (page: number = 0, pageSize: number = 10, snippetName?: string) => {
+export const useGetSnippets = (
+  page: number = 0,
+  pageSize: number = 10,
+  filterOrName?: string | SnippetFilterOptions,
+) => {
   const snippetOperations = useSnippetsOperations();
 
-  return useQuery<PaginatedSnippets, Error>(['listSnippets', page, pageSize, snippetName], () =>
-    snippetOperations.listSnippetDescriptors(page, pageSize, snippetName),
+  return useQuery<PaginatedSnippets, Error>(['listSnippets', page, pageSize, filterOrName], () =>
+    snippetOperations.listSnippetDescriptors(page, pageSize, filterOrName),
   );
 };
 

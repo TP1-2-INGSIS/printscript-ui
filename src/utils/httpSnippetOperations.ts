@@ -6,7 +6,7 @@ import {
   Snippet,
   UpdateSnippet,
 } from './snippet';
-import { SnippetOperations } from './snippetOperations';
+import { SnippetFilterOptions, SnippetOperations } from './snippetOperations';
 import { PaginatedUsers } from './users';
 import { TestCase } from '../types/TestCase';
 import { TestCaseResult } from './queries';
@@ -34,11 +34,13 @@ export const BackendSnippetDetailSchema = BackendSnippetSummarySchema.extend({
   lintViolations: z
     .array(
       z.object({
-        line: z.number(),
-        column: z.number(),
-        message: z.string(),
+        rule: z.string().optional().default('lint'),
+        message: z.string().optional().default(''),
+        line: z.number().nullable().optional(),
+        column: z.number().nullable().optional(),
       }),
     )
+    .nullable()
     .optional(),
   sharedWith: z.array(z.string()).nullable().optional(),
   createdAt: z.string().optional(),
@@ -125,11 +127,18 @@ const mapSummaryToSnippet = (summary: BackendSnippetSummary): Snippet => ({
 const mapDetailToSnippet = (detail: BackendSnippetDetail): Snippet => ({
   id: detail.id,
   name: detail.name,
+  description: detail.description,
   language: detail.language,
   extension: detail.language === 'printscript' ? 'prs' : detail.language,
   content: detail.content ?? '',
   compliance: mapLintStatus(detail.lintStatus),
   author: detail.ownerId,
+  lintViolations: (detail.lintViolations || []).map((v) => ({
+    rule: v.rule || 'lint',
+    message: v.message || '',
+    line: v.line,
+    column: v.column,
+  })),
 });
 
 const mapConfigToRules = (config: Record<string, unknown>): Rule[] => {
@@ -268,15 +277,26 @@ export class HttpSnippetOperations implements SnippetOperations {
   async listSnippetDescriptors(
     page: number = 0,
     pageSize: number = 10,
-    snippetName?: string,
+    filterOrName?: string | SnippetFilterOptions,
   ): Promise<PaginatedSnippets> {
     const query = new URLSearchParams({
       page: String(page),
       size: String(pageSize),
     });
 
-    if (snippetName) {
-      query.set('name', snippetName);
+    if (typeof filterOrName === 'string') {
+      if (filterOrName) {
+        query.set('name', filterOrName);
+      }
+    } else if (filterOrName) {
+      if (filterOrName.name) query.set('name', filterOrName.name);
+      if (filterOrName.relation && filterOrName.relation !== 'ALL') {
+        query.set('relation', filterOrName.relation);
+      }
+      if (filterOrName.language) query.set('language', filterOrName.language);
+      if (filterOrName.lintStatus) query.set('lintStatus', filterOrName.lintStatus);
+      if (filterOrName.sort) query.set('sort', filterOrName.sort);
+      if (filterOrName.order) query.set('order', filterOrName.order);
     }
 
     const data = await this.request<BackendSnippetPage>(

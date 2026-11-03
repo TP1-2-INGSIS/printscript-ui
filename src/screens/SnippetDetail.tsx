@@ -104,6 +104,11 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
           <Typography variant="h4" fontWeight={'bold'}>
             {snippet?.name ?? 'Snippet'}
           </Typography>
+          {snippet?.description && (
+            <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
+              {snippet.description}
+            </Typography>
+          )}
           <Box display="flex" flexDirection="row" gap="8px" padding="8px">
             <Tooltip title={'Share'}>
               <IconButton onClick={() => setShareModalOppened(true)}>
@@ -142,6 +147,28 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
               </IconButton>
             </Tooltip>
           </Box>
+          {snippet?.lintViolations && snippet.lintViolations.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold">
+                Linting Violations ({snippet.lintViolations.length})
+              </Typography>
+              <Box component="ul" sx={{ pl: 2, m: 0, mt: 0.5 }}>
+                {snippet.lintViolations.map((violation, idx) => (
+                  <Typography component="li" variant="body2" key={idx}>
+                    {violation.line != null && violation.column != null
+                      ? `Line ${violation.line}, Col ${violation.column} [${violation.rule}]: `
+                      : `[${violation.rule}]: `}
+                    {violation.message}
+                  </Typography>
+                ))}
+              </Box>
+            </Alert>
+          )}
+          {snippet?.compliance === 'compliant' && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Snippet complies with all linting rules.
+            </Alert>
+          )}
           <Box display={'flex'} gap={2}>
             <Bòx
               flex={1}
