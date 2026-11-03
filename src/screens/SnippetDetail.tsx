@@ -1,13 +1,27 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import { highlight, languages } from 'prismjs';
 import 'prismjs/components/prism-clike';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/themes/prism-okaidia.css';
-import { Alert, Box, CircularProgress, IconButton, Tooltip, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  IconButton,
+  Menu,
+  MenuItem,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { useUpdateSnippetById } from '../utils/queries.tsx';
-import { useFormatSnippet, useGetSnippetById, useShareSnippet } from '../utils/queries.tsx';
+import {
+  useDownloadSnippet,
+  useFormatSnippet,
+  useGetSnippetById,
+  useShareSnippet,
+  useUpdateSnippetById,
+} from '../utils/queries.tsx';
 import { Bòx } from '../components/snippet-table/SnippetBox.tsx';
 import { BugReport, Delete, Download, Save, Share } from '@mui/icons-material';
 import { ShareSnippetModal } from '../components/snippet-detail/ShareSnippetModal.tsx';
@@ -17,39 +31,51 @@ import { SnippetExecution } from './SnippetExecution.tsx';
 import ReadMoreIcon from '@mui/icons-material/ReadMore';
 import { queryClient } from '../App.tsx';
 import { DeleteConfirmationModal } from '../components/snippet-detail/DeleteConfirmationModal.tsx';
+import { ErrorDetail, HttpError, triggerBlobDownload } from '../utils/httpSnippetOperations.ts';
 
 type SnippetDetailProps = {
   id: string;
   handleCloseModal: () => void;
 };
 
-const DownloadButton = ({ snippet }: { snippet?: Snippet }) => {
+const DownloadMenuButton = ({ snippet }: { snippet?: Snippet }) => {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const { mutateAsync: download, isLoading } = useDownloadSnippet();
+
   if (!snippet) return null;
-  const file = new Blob([snippet.content], { type: 'text/plain' });
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleDownload = async (formatted: boolean) => {
+    handleClose();
+    try {
+      const { blob, filename } = await download({ id: snippet.id, formatted });
+      triggerBlobDownload(blob, filename || `${snippet.name}.${snippet.extension}`);
+    } catch {
+      // Fallback: descarga local si el backend no está disponible
+      const file = new Blob([snippet.content], { type: 'text/plain' });
+      triggerBlobDownload(file, `${snippet.name}.${snippet.extension}`);
+    }
+  };
 
   return (
-    <Tooltip title={'Download'}>
-      <IconButton
-        sx={{
-          cursor: 'pointer',
-        }}
-      >
-        <a
-          download={`${snippet.name}.${snippet.extension}`}
-          target="_blank"
-          rel="noreferrer"
-          href={URL.createObjectURL(file)}
-          style={{
-            textDecoration: 'none',
-            color: 'inherit',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          <Download />
-        </a>
-      </IconButton>
-    </Tooltip>
+    <>
+      <Tooltip title={'Download'}>
+        <IconButton onClick={handleClick} disabled={isLoading}>
+          {isLoading ? <CircularProgress size={20} /> : <Download />}
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
+        <MenuItem onClick={() => handleDownload(false)}>Download original snippet</MenuItem>
+        <MenuItem onClick={() => handleDownload(true)}>Download formatted snippet</MenuItem>
+      </Menu>
+    </>
   );
 };
 
@@ -60,6 +86,10 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] = useState(false);
   const [testModalOpened, setTestModalOpened] = useState(false);
 
+  const [updateErrors, setUpdateErrors] = useState<ErrorDetail[]>([]);
+  const [updateErrorMessage, setUpdateErrorMessage] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+
   const { data: snippet, isLoading } = useGetSnippetById(id);
   const { mutate: shareSnippet, isLoading: loadingShare } = useShareSnippet();
   const {
@@ -67,14 +97,43 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
     isLoading: isFormatLoading,
     data: formatSnippetData,
   } = useFormatSnippet();
-  const { mutate: updateSnippet, isLoading: isUpdateSnippetLoading } = useUpdateSnippetById({
-    onSuccess: () => queryClient.invalidateQueries(['snippet', id]),
+  const { mutateAsync: updateSnippet, isLoading: isUpdateSnippetLoading } = useUpdateSnippetById({
+    onSuccess: () => {
+      setUpdateErrors([]);
+      setUpdateErrorMessage(null);
+      setUpdateSuccess(true);
+      queryClient.invalidateQueries(['snippet', id]);
+      queryClient.invalidateQueries('listSnippets');
+    },
   });
+
+  const handleSave = async () => {
+    setUpdateErrors([]);
+    setUpdateErrorMessage(null);
+    setUpdateSuccess(false);
+    try {
+      await updateSnippet({ id, updateSnippet: { content: code } });
+    } catch (err: unknown) {
+      if (err instanceof HttpError) {
+        setUpdateErrorMessage(err.message);
+        if (err.details && err.details.length > 0) {
+          setUpdateErrors(err.details);
+        }
+      } else if (err instanceof Error) {
+        setUpdateErrorMessage(err.message);
+      } else {
+        setUpdateErrorMessage('Failed to save snippet changes');
+      }
+    }
+  };
 
   useEffect(() => {
     if (snippet) {
       setCode(snippet.content);
     }
+    setUpdateErrors([]);
+    setUpdateErrorMessage(null);
+    setUpdateSuccess(false);
   }, [snippet]);
 
   useEffect(() => {
@@ -120,7 +179,7 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
                 <BugReport />
               </IconButton>
             </Tooltip>
-            <DownloadButton snippet={snippet} />
+            <DownloadMenuButton snippet={snippet} />
             {/*<Tooltip title={runSnippet ? "Stop run" : "Run"}>*/}
             {/*  <IconButton onClick={() => setRunSnippet(!runSnippet)}>*/}
             {/*    {runSnippet ? <StopRounded/> : <PlayArrow/>}*/}
@@ -135,10 +194,10 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
             <Tooltip title={'Save changes'}>
               <IconButton
                 color={'primary'}
-                onClick={() => updateSnippet({ id: id, updateSnippet: { content: code } })}
+                onClick={handleSave}
                 disabled={isUpdateSnippetLoading || snippet?.content === code}
               >
-                <Save />
+                {isUpdateSnippetLoading ? <CircularProgress size={20} /> : <Save />}
               </IconButton>
             </Tooltip>
             <Tooltip title={'Delete'}>
@@ -147,6 +206,30 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
               </IconButton>
             </Tooltip>
           </Box>
+          {updateErrorMessage && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold">
+                {updateErrorMessage}
+              </Typography>
+              {updateErrors.length > 0 && (
+                <Box component="ul" sx={{ pl: 2, m: 0, mt: 0.5 }}>
+                  {updateErrors.map((err, idx) => (
+                    <Typography component="li" variant="body2" key={idx}>
+                      {err.line != null && err.column != null
+                        ? `Line ${err.line}, Col ${err.column}: `
+                        : ''}
+                      {err.message || err.rule || 'Syntax error'}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+            </Alert>
+          )}
+          {updateSuccess && (
+            <Alert severity="success" sx={{ mb: 2 }} onClose={() => setUpdateSuccess(false)}>
+              Snippet changes saved successfully.
+            </Alert>
+          )}
           {snippet?.lintViolations && snippet.lintViolations.length > 0 && (
             <Alert severity="warning" sx={{ mb: 2 }}>
               <Typography variant="subtitle2" fontWeight="bold">
@@ -205,7 +288,11 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
         onClose={() => setShareModalOppened(false)}
         onShare={handleShareSnippet}
       />
-      <TestSnippetModal open={testModalOpened} onClose={() => setTestModalOpened(false)} />
+      <TestSnippetModal
+        open={testModalOpened}
+        onClose={() => setTestModalOpened(false)}
+        snippetId={snippet?.id}
+      />
       <DeleteConfirmationModal
         open={deleteConfirmationModalOpen}
         onClose={() => setDeleteConfirmationModalOpen(false)}

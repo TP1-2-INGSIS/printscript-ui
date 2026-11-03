@@ -1,12 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TestCase } from '../../types/TestCase.ts';
-import { Autocomplete, Box, Button, Chip, TextField, Typography } from '@mui/material';
+import {
+  Autocomplete,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { BugReport, Delete, Save } from '@mui/icons-material';
 import { useTestSnippet } from '../../utils/queries.tsx';
 
 type TabPanelProps = {
   index: number;
   value: number;
+  snippetId?: string;
   test?: TestCase;
   setTestCase: (test: Partial<TestCase>) => void;
   removeTestCase?: (testIndex: string) => void;
@@ -15,13 +24,18 @@ type TabPanelProps = {
 export const TabPanel = ({
   value,
   index,
+  snippetId,
   test: initialTest,
   setTestCase,
   removeTestCase,
 }: TabPanelProps) => {
   const [testData, setTestData] = useState<Partial<TestCase> | undefined>(initialTest);
 
-  const { mutateAsync: testSnippet, data } = useTestSnippet();
+  const { mutateAsync: testSnippet, data, isLoading: isTesting } = useTestSnippet();
+
+  useEffect(() => {
+    setTestData(initialTest);
+  }, [initialTest]);
 
   return (
     <div
@@ -37,7 +51,7 @@ export const TabPanel = ({
             <Typography fontWeight="bold">Name</Typography>
             <TextField
               size="small"
-              value={testData?.name}
+              value={testData?.name ?? ''}
               onChange={(e) => setTestData({ ...testData, name: e.target.value })}
             />
           </Box>
@@ -97,9 +111,10 @@ export const TabPanel = ({
               Save
             </Button>
             <Button
-              onClick={() => testSnippet(testData ?? {})}
+              disabled={isTesting}
+              onClick={() => testSnippet({ testCase: testData ?? {}, snippetId })}
               variant={'contained'}
-              startIcon={<BugReport />}
+              startIcon={isTesting ? <CircularProgress size={16} color="inherit" /> : <BugReport />}
               disableElevation
             >
               Test

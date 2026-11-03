@@ -8,12 +8,17 @@ export type CreateSnippet = {
   content: string;
   language: string;
   extension: string;
+  description?: string | null;
+  version?: string;
 };
 
 export type CreateSnippetWithLang = CreateSnippet & { language: string };
 
 export type UpdateSnippet = {
-  content: string;
+  content?: string;
+  name?: string;
+  description?: string | null;
+  version?: string;
 };
 
 export type LintViolation = {
@@ -26,6 +31,7 @@ export type LintViolation = {
 export type Snippet = CreateSnippet & {
   id: string;
   description?: string | null;
+  version?: string;
   lintViolations?: LintViolation[];
 } & SnippetStatus;
 
