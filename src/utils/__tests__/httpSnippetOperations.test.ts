@@ -861,6 +861,32 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
       }
     });
 
+    it('captures UNAUTHENTICATED error code and message from backend D03 error format', async () => {
+      server.use(
+        http.get(`${BASE_URL}/snippets`, () => {
+          return HttpResponse.json(
+            {
+              error: 'UNAUTHENTICATED',
+              message: 'Missing authentication',
+              details: [],
+            },
+            { status: 401 },
+          );
+        }),
+      );
+
+      try {
+        await operations.listSnippetDescriptors(0, 10);
+        expect.unreachable('Should have thrown HttpError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpError);
+        const httpErr = err as HttpError;
+        expect(httpErr.status).toBe(401);
+        expect(httpErr.code).toBe('UNAUTHENTICATED');
+        expect(httpErr.message).toBe('Missing authentication');
+      }
+    });
+
     it('getFileTypes returns versions list', async () => {
       server.use(
         http.get(`${BASE_URL}/languages`, () => {
