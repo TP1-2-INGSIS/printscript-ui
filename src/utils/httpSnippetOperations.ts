@@ -278,6 +278,8 @@ export class HttpSnippetOperations implements SnippetOperations {
           }
           if ('code' in errorBody && typeof errorBody.code === 'string') {
             errorCode = errorBody.code;
+          } else if ('error' in errorBody && typeof errorBody.error === 'string') {
+            errorCode = errorBody.error;
           }
           if ('details' in errorBody && Array.isArray(errorBody.details)) {
             errorDetails = errorBody.details as ErrorDetail[];
