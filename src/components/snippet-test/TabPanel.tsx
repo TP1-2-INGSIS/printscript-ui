@@ -140,7 +140,14 @@ export const TabPanel = ({
           </Box>
           {data && (
             <Box display="flex" flexDirection="column" gap={1} data-testid="test-result">
-              {data.errorMessage && <Alert severity="error">{data.errorMessage}</Alert>}
+              {data.error && (
+                <Alert severity="error">
+                  {data.error.line != null
+                    ? `Line ${data.error.line}${data.error.column != null ? `, Col ${data.error.column}` : ''}: `
+                    : ''}
+                  {data.error.message}
+                </Alert>
+              )}
               <Typography fontWeight="bold">Expected output</Typography>
               <OutputList lines={data.expectedOutputs} />
               <Typography fontWeight="bold">Actual output</Typography>

@@ -767,7 +767,7 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
       status: 'success',
       expectedOutputs: ['3'],
       actualOutputs: ['3'],
-      errorMessage: undefined,
+      error: undefined,
     });
   });
 
@@ -827,7 +827,7 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
         return HttpResponse.json({
           testId: 'test-err',
           status: 'ERROR',
-          errorMessage: 'Syntax error at line 1',
+          error: { rule: null, message: 'Syntax error', line: 1, column: 4 },
         });
       }),
     );
@@ -837,7 +837,7 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
       status: 'fail',
       expectedOutputs: [],
       actualOutputs: [],
-      errorMessage: 'Syntax error at line 1',
+      error: { message: 'Syntax error', rule: undefined, line: 1, column: 4 },
     });
   });
 

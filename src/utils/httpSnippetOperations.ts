@@ -97,7 +97,14 @@ export const BackendTestRunResultSchema = z.object({
   status: z.string(),
   expectedOutputs: z.array(z.string()).optional().default([]),
   actualOutputs: z.array(z.string()).optional().default([]),
-  errorMessage: z.string().nullish(),
+  error: z
+    .object({
+      rule: z.string().nullish(),
+      message: z.string(),
+      line: z.number().nullish(),
+      column: z.number().nullish(),
+    })
+    .nullish(),
 });
 
 export type BackendTestRunResult = z.infer<typeof BackendTestRunResultSchema>;
@@ -715,7 +722,14 @@ export class HttpSnippetOperations implements SnippetOperations {
       status: result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail',
       expectedOutputs: result.expectedOutputs,
       actualOutputs: result.actualOutputs,
-      errorMessage: result.errorMessage ?? undefined,
+      error: result.error
+        ? {
+            message: result.error.message,
+            rule: result.error.rule ?? undefined,
+            line: result.error.line ?? undefined,
+            column: result.error.column ?? undefined,
+          }
+        : undefined,
     };
   }
 }

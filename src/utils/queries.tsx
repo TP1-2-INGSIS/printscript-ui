@@ -167,7 +167,7 @@ export type TestCaseResult = {
   status: TestCaseStatus;
   expectedOutputs: string[];
   actualOutputs: string[];
-  errorMessage?: string;
+  error?: { message: string; rule?: string; line?: number; column?: number };
 };
 
 export const useTestSnippet = () => {
