@@ -3,6 +3,7 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { HttpSnippetOperations, HttpError, triggerBlobDownload } from '../httpSnippetOperations';
 import { CreateSnippet, UpdateSnippet } from '../snippet';
+import { getUserLabel } from '../users';
 
 const BASE_URL = 'http://localhost:8080/api';
 const FAKE_TOKEN = 'mock-jwt-token-xyz';
@@ -370,8 +371,8 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(capturedUrl).toContain('search=an');
     expect(capturedUrl).toContain('limit=5');
     expect(result.count).toBe(2);
-    expect(result.users[0]).toEqual({ id: 'user-1', name: 'Ana' });
-    expect(result.users[1]).toEqual({ id: 'user-2', name: 'juan@example.com' });
+    expect(result.users[0]).toEqual({ id: 'user-1', name: 'Ana', email: 'ana@example.com' });
+    expect(result.users[1]).toEqual({ id: 'user-2', name: '', email: 'juan@example.com' });
   });
 
   it('shareSnippet calls POST /snippets/{id}/share and returns updated snippet', async () => {
@@ -520,9 +521,74 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(result).toEqual(newRules);
   });
 
-  it('formatSnippet returns snippet string content', async () => {
-    const formatted = await operations.formatSnippet('let a = 1;');
-    expect(formatted).toBe('let a = 1;');
+  it('formatSnippet posts content, language and version to /snippets/format', async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post(`${BASE_URL}/snippets/format`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ content: 'let a: number = 1;' });
+      }),
+    );
+
+    const formatted = await operations.formatSnippet({
+      content: 'let a:number=1;',
+      language: 'printscript',
+      version: '1.0',
+    });
+
+    expect(formatted).toBe('let a: number = 1;');
+    expect(capturedBody).toEqual({
+      content: 'let a:number=1;',
+      language: 'printscript',
+      version: '1.0',
+    });
+  });
+
+  it('formatSnippet uses the latest version of the language when none is given', async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.get(`${BASE_URL}/languages`, () =>
+        HttpResponse.json([{ id: 'printscript', versions: ['1.0', '1.1'] }]),
+      ),
+      http.post(`${BASE_URL}/snippets/format`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ content: 'x' });
+      }),
+    );
+
+    await operations.formatSnippet({ content: 'x', language: 'printscript' });
+
+    expect(capturedBody).toEqual({ content: 'x', language: 'printscript', version: '1.1' });
+  });
+
+  it('formatSnippet throws HttpError with violations on 422', async () => {
+    server.use(
+      http.post(`${BASE_URL}/snippets/format`, () =>
+        HttpResponse.json(
+          {
+            error: 'SYNTAX_ERROR',
+            message: 'Invalid code',
+            details: [{ rule: 'syntax', message: 'Unexpected token', line: 1, column: 3 }],
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(
+      operations.formatSnippet({ content: 'let', language: 'printscript', version: '1.1' }),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: 'Invalid code',
+      details: [{ line: 1, column: 3, message: 'Unexpected token' }],
+    });
+  });
+
+  it('getUserLabel builds name (email) and drops missing or duplicated parts', () => {
+    expect(getUserLabel({ id: '1', name: 'Ana', email: 'ana@x.com' })).toBe('Ana (ana@x.com)');
+    expect(getUserLabel({ id: '1', name: '', email: 'ana@x.com' })).toBe('ana@x.com');
+    expect(getUserLabel({ id: '1', name: 'Ana' })).toBe('Ana');
+    expect(getUserLabel({ id: '1', name: 'a@x.com', email: 'A@x.com' })).toBe('a@x.com');
   });
 
   it('getTestCases fetches tests for the active snippet', async () => {

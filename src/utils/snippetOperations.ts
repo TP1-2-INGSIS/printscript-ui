@@ -14,6 +14,12 @@ export type SnippetFilterOptions = {
   order?: 'asc' | 'desc';
 };
 
+export type FormatSnippetParams = {
+  content: string;
+  language: string;
+  version?: string;
+};
+
 export interface SnippetOperations {
   listSnippetDescriptors(
     page: number,
@@ -39,7 +45,7 @@ export interface SnippetOperations {
 
   getTestCases(snippetId?: string): Promise<TestCase[]>;
 
-  formatSnippet(snippet: string): Promise<string>;
+  formatSnippet(params: FormatSnippetParams): Promise<string>;
 
   postTestCase(testCase: Partial<TestCase>, snippetId?: string): Promise<TestCase>;
 
