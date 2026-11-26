@@ -11,14 +11,21 @@ import {
 } from '@mui/material';
 import { useGetLintingRules, useModifyLintingRules } from '../../utils/queries.tsx';
 import { queryClient } from '../../App.tsx';
+import { useSnackbarContext } from '../../contexts/snackbarContext.tsx';
 import { Rule } from '../../types/Rule.ts';
 
 const LintingRulesList = () => {
   const [rules, setRules] = useState<Rule[] | undefined>([]);
 
+  const { createSnackbar } = useSnackbarContext();
   const { data, isLoading } = useGetLintingRules();
   const { mutateAsync, isLoading: isLoadingMutate } = useModifyLintingRules({
-    onSuccess: () => queryClient.invalidateQueries('lintingRules'),
+    onSuccess: () => {
+      queryClient.invalidateQueries('lintingRules');
+      queryClient.invalidateQueries('listSnippets');
+      queryClient.invalidateQueries('snippet');
+      createSnackbar('info', 'Las reglas se están aplicando en segundo plano');
+    },
   });
 
   useEffect(() => {

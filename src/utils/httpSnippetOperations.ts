@@ -110,8 +110,11 @@ const mapLintStatus = (status?: string): ComplianceEnum => {
       return 'not-compliant';
     case 'FAILED':
       return 'failed';
-    default:
+    case 'PENDING':
       return 'pending';
+    default:
+      // Unknown or missing status must not map to 'pending': the UI polls while pending.
+      return 'failed';
   }
 };
 
@@ -295,7 +298,21 @@ export class HttpSnippetOperations implements SnippetOperations {
       return undefined as unknown as T;
     }
 
-    const rawData: unknown = await response.json();
+    let rawData: unknown;
+    if (response.status === 202) {
+      // 202 Accepted: el backend procesa en segundo plano; el body es opcional.
+      const text = await response.text();
+      try {
+        rawData = text ? JSON.parse(text) : undefined;
+      } catch {
+        rawData = undefined;
+      }
+      if (!schema || rawData === undefined) {
+        return rawData as T;
+      }
+    } else {
+      rawData = await response.json();
+    }
 
     if (schema) {
       const parseResult = schema.safeParse(rawData);
