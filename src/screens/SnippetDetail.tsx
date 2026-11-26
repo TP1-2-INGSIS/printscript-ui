@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import { highlight, languages } from 'prismjs';
 import 'prismjs/components/prism-clike';
@@ -23,11 +23,19 @@ import {
   useUpdateSnippetById,
 } from '../utils/queries.tsx';
 import { Bòx } from '../components/snippet-table/SnippetBox.tsx';
-import { BugReport, Delete, Download, Save, Share } from '@mui/icons-material';
+import {
+  BugReport,
+  Delete,
+  Download,
+  PlayArrow,
+  Save,
+  Share,
+  StopRounded,
+} from '@mui/icons-material';
 import { ShareSnippetModal } from '../components/snippet-detail/ShareSnippetModal.tsx';
 import { TestSnippetModal } from '../components/snippet-test/TestSnippetModal.tsx';
 import { Snippet } from '../utils/snippet.ts';
-import { SnippetExecution } from './SnippetExecution.tsx';
+import { ExecutionStatus, SnippetExecution, SnippetExecutionHandle } from './SnippetExecution.tsx';
 import ReadMoreIcon from '@mui/icons-material/ReadMore';
 import { queryClient } from '../App.tsx';
 import { DeleteConfirmationModal } from '../components/snippet-detail/DeleteConfirmationModal.tsx';
@@ -82,6 +90,9 @@ const DownloadMenuButton = ({ snippet }: { snippet?: Snippet }) => {
 export const SnippetDetail = (props: SnippetDetailProps) => {
   const { id, handleCloseModal } = props;
   const [code, setCode] = useState('');
+  const executionRef = useRef<SnippetExecutionHandle>(null);
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
+  const isRunning = executionStatus === 'connecting' || executionStatus === 'running';
   const [shareModalOppened, setShareModalOppened] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] = useState(false);
   const [testModalOpened, setTestModalOpened] = useState(false);
@@ -196,11 +207,18 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
               </IconButton>
             </Tooltip>
             <DownloadMenuButton snippet={snippet} />
-            {/*<Tooltip title={runSnippet ? "Stop run" : "Run"}>*/}
-            {/*  <IconButton onClick={() => setRunSnippet(!runSnippet)}>*/}
-            {/*    {runSnippet ? <StopRounded/> : <PlayArrow/>}*/}
-            {/*  </IconButton>*/}
-            {/*</Tooltip>*/}
+            <Tooltip title={isRunning ? 'Stop run' : 'Run'}>
+              <IconButton
+                aria-label={isRunning ? 'Stop run' : 'Run'}
+                data-testid="run-button"
+                onClick={() =>
+                  isRunning ? executionRef.current?.stop() : executionRef.current?.run()
+                }
+                disabled={!snippet}
+              >
+                {isRunning ? <StopRounded /> : <PlayArrow />}
+              </IconButton>
+            </Tooltip>
             {/* TODO: we can implement a live mode*/}
             <Tooltip title={'Format'}>
               <IconButton onClick={handleFormat} disabled={isFormatLoading || !snippet}>
@@ -294,7 +312,11 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
           </Box>
           <Box pt={1} flex={1} marginTop={2}>
             <Alert severity="info">Output</Alert>
-            <SnippetExecution />
+            <SnippetExecution
+              ref={executionRef}
+              snippetId={id}
+              onStatusChange={setExecutionStatus}
+            />
           </Box>
         </>
       )}

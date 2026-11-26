@@ -97,6 +97,14 @@ export const BackendTestRunResultSchema = z.object({
   status: z.string(),
   expectedOutputs: z.array(z.string()).optional().default([]),
   actualOutputs: z.array(z.string()).optional().default([]),
+  error: z
+    .object({
+      rule: z.string().nullish(),
+      message: z.string(),
+      line: z.number().nullish(),
+      column: z.number().nullish(),
+    })
+    .nullish(),
 });
 
 export type BackendTestRunResult = z.infer<typeof BackendTestRunResultSchema>;
@@ -699,7 +707,7 @@ export class HttpSnippetOperations implements SnippetOperations {
   async testSnippet(testCase: Partial<TestCase>, snippetId?: string): Promise<TestCaseResult> {
     const targetId = snippetId || this.activeSnippetId;
     if (!targetId || !testCase.id) {
-      return 'fail';
+      return { status: 'fail', expectedOutputs: [], actualOutputs: [] };
     }
 
     const result = await this.request<BackendTestRunResult>(
@@ -710,6 +718,18 @@ export class HttpSnippetOperations implements SnippetOperations {
       BackendTestRunResultSchema,
     );
 
-    return result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail';
+    return {
+      status: result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail',
+      expectedOutputs: result.expectedOutputs,
+      actualOutputs: result.actualOutputs,
+      error: result.error
+        ? {
+            message: result.error.message,
+            rule: result.error.rule ?? undefined,
+            line: result.error.line ?? undefined,
+            column: result.error.column ?? undefined,
+          }
+        : undefined,
+    };
   }
 }
