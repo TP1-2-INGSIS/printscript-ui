@@ -92,11 +92,7 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
 
   const { data: snippet, isLoading } = useGetSnippetById(id);
   const { mutate: shareSnippet, isLoading: loadingShare } = useShareSnippet();
-  const {
-    mutate: formatSnippet,
-    isLoading: isFormatLoading,
-    data: formatSnippetData,
-  } = useFormatSnippet();
+  const { mutateAsync: formatSnippet, isLoading: isFormatLoading } = useFormatSnippet();
   const { mutateAsync: updateSnippet, isLoading: isUpdateSnippetLoading } = useUpdateSnippetById({
     onSuccess: () => {
       setUpdateErrors([]);
@@ -136,11 +132,31 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
     setUpdateSuccess(false);
   }, [snippet]);
 
-  useEffect(() => {
-    if (formatSnippetData) {
-      setCode(formatSnippetData);
+  const handleFormat = async () => {
+    if (!snippet) return;
+    setUpdateErrors([]);
+    setUpdateErrorMessage(null);
+    setUpdateSuccess(false);
+    try {
+      const formatted = await formatSnippet({
+        content: code,
+        language: snippet.language,
+        version: snippet.version,
+      });
+      setCode(formatted);
+    } catch (err: unknown) {
+      if (err instanceof HttpError) {
+        setUpdateErrorMessage(err.message);
+        if (err.details && err.details.length > 0) {
+          setUpdateErrors(err.details);
+        }
+      } else if (err instanceof Error) {
+        setUpdateErrorMessage(err.message);
+      } else {
+        setUpdateErrorMessage('Failed to format snippet');
+      }
     }
-  }, [formatSnippetData]);
+  };
 
   async function handleShareSnippet(userId: string) {
     shareSnippet({ snippetId: id, userId });
@@ -187,7 +203,7 @@ export const SnippetDetail = (props: SnippetDetailProps) => {
             {/*</Tooltip>*/}
             {/* TODO: we can implement a live mode*/}
             <Tooltip title={'Format'}>
-              <IconButton onClick={() => formatSnippet(code)} disabled={isFormatLoading}>
+              <IconButton onClick={handleFormat} disabled={isFormatLoading || !snippet}>
                 <ReadMoreIcon />
               </IconButton>
             </Tooltip>

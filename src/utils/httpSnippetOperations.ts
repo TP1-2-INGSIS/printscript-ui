@@ -6,7 +6,7 @@ import {
   Snippet,
   UpdateSnippet,
 } from './snippet';
-import { SnippetFilterOptions, SnippetOperations } from './snippetOperations';
+import { FormatSnippetParams, SnippetFilterOptions, SnippetOperations } from './snippetOperations';
 import { PaginatedUsers } from './users';
 import { TestCase } from '../types/TestCase';
 import { TestCaseResult } from './queries';
@@ -511,7 +511,8 @@ export class HttpSnippetOperations implements SnippetOperations {
       count: users.length,
       users: users.map((u) => ({
         id: u.id,
-        name: u.name || u.email,
+        name: u.name,
+        email: u.email,
       })),
     };
   }
@@ -576,8 +577,24 @@ export class HttpSnippetOperations implements SnippetOperations {
     return newRules;
   }
 
-  async formatSnippet(snippet: string): Promise<string> {
-    return snippet;
+  async formatSnippet({ content, language, version }: FormatSnippetParams): Promise<string> {
+    let resolvedVersion = version;
+    if (!resolvedVersion) {
+      const fileTypes = await this.getFileTypes();
+      const versions = fileTypes.find((f) => f.language === language)?.versions ?? [];
+      resolvedVersion = versions[versions.length - 1];
+    }
+
+    const response = await this.request<{ content: string }>(
+      '/snippets/format',
+      {
+        method: 'POST',
+        body: JSON.stringify({ content, language, version: resolvedVersion }),
+      },
+      z.object({ content: z.string() }),
+    );
+
+    return response.content;
   }
 
   async getTestCases(snippetId?: string): Promise<TestCase[]> {

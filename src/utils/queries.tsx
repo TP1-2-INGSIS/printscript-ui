@@ -1,6 +1,10 @@
 import { useMutation, UseMutationResult, useQuery } from 'react-query';
 import { CreateSnippet, PaginatedSnippets, Snippet, UpdateSnippet } from './snippet.ts';
-import { SnippetFilterOptions, SnippetOperations } from './snippetOperations.ts';
+import {
+  FormatSnippetParams,
+  SnippetFilterOptions,
+  SnippetOperations,
+} from './snippetOperations.ts';
 import { PaginatedUsers } from './users.ts';
 import { HttpSnippetOperations } from './httpSnippetOperations.ts';
 import { BACKEND_URL } from './constants.ts';
@@ -201,8 +205,8 @@ export const useModifyLintingRules = ({ onSuccess }: { onSuccess: () => void }) 
 export const useFormatSnippet = () => {
   const snippetOperations = useSnippetsOperations();
 
-  return useMutation<string, Error, string>((snippetContent) =>
-    snippetOperations.formatSnippet(snippetContent),
+  return useMutation<string, Error, FormatSnippetParams>((params) =>
+    snippetOperations.formatSnippet(params),
   );
 };
 
