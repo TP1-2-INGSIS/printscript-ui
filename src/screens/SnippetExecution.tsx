@@ -13,7 +13,7 @@ import {
 
 export type ExecutionStatus = 'idle' | 'connecting' | 'running' | 'finished' | 'error';
 
-export type SnippetExecutionHandle = { run: () => void; stop: () => void };
+export type SnippetExecutionHandle = { run: () => Promise<void>; stop: () => void };
 
 type Props = {
   snippetId: string;
@@ -29,8 +29,11 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
     const [status, setStatus] = useState<ExecutionStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
+    const runIdRef = useRef(0);
+    const statusRef = useRef<ExecutionStatus>('idle');
 
     const updateStatus = (next: ExecutionStatus) => {
+      statusRef.current = next;
       setStatus(next);
       onStatusChange?.(next);
     };
@@ -48,8 +51,14 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
       }
     };
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => closeSocket, []);
+    useEffect(
+      () => () => {
+        runIdRef.current++;
+        closeSocket();
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [],
+    );
 
     const send = (message: ClientMessage) => {
       const socket = socketRef.current;
@@ -59,6 +68,8 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
     };
 
     const run = async () => {
+      if (statusRef.current === 'connecting' || statusRef.current === 'running') return;
+      const id = ++runIdRef.current;
       closeSocket();
       setOutput([]);
       setError(null);
@@ -67,6 +78,7 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
       updateStatus('connecting');
       try {
         const token = await getAccessTokenSilently();
+        if (id !== runIdRef.current) return;
         const socket = new WebSocket(buildExecutionUrl(BACKEND_URL, snippetId, token));
         socketRef.current = socket;
         socket.onopen = () => updateStatus('running');
@@ -83,11 +95,13 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
             case 'finished':
               setPrompt(null);
               updateStatus('finished');
+              socket.close();
               break;
             case 'error':
               setPrompt(null);
               setError(formatExecutionError(message));
               updateStatus('error');
+              socket.close();
               break;
           }
         };
@@ -99,19 +113,19 @@ export const SnippetExecution = forwardRef<SnippetExecutionHandle, Props>(
         socket.onclose = () => {
           socketRef.current = null;
           setPrompt(null);
-          setStatus((current) => {
-            const next = current === 'running' || current === 'connecting' ? 'finished' : current;
-            if (next !== current) onStatusChange?.(next);
-            return next;
-          });
+          if (statusRef.current === 'running' || statusRef.current === 'connecting') {
+            updateStatus('finished');
+          }
         };
       } catch (e) {
+        if (id !== runIdRef.current) return;
         setError(e instanceof Error ? e.message : 'Could not start execution');
         updateStatus('error');
       }
     };
 
     const stop = () => {
+      runIdRef.current++;
       send({ type: 'stop' });
       closeSocket();
       setPrompt(null);
