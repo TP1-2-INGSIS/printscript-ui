@@ -110,8 +110,11 @@ const mapLintStatus = (status?: string): ComplianceEnum => {
       return 'not-compliant';
     case 'FAILED':
       return 'failed';
-    default:
+    case 'PENDING':
       return 'pending';
+    default:
+      // Unknown or missing status must not map to 'pending': the UI polls while pending.
+      return 'failed';
   }
 };
 
@@ -304,7 +307,7 @@ export class HttpSnippetOperations implements SnippetOperations {
       } catch {
         rawData = undefined;
       }
-      if (!schema) {
+      if (!schema || rawData === undefined) {
         return rawData as T;
       }
     } else {

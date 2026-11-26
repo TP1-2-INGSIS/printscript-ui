@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { HttpSnippetOperations, HttpError, triggerBlobDownload } from '../httpSnippetOperations';
@@ -482,6 +483,39 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
 
     await expect(operations.modifyFormatRule(rules)).resolves.toEqual(rules);
     await expect(operations.modifyLintingRule(rules)).resolves.toEqual(rules);
+  });
+
+  it('an empty 202 skips schema validation', async () => {
+    server.use(http.get(`${BASE_URL}/x`, () => new HttpResponse(null, { status: 202 })));
+    const schema = z.object({ a: z.string() });
+    const req = (
+      operations as unknown as {
+        request: (p: string, o: RequestInit, s: unknown) => Promise<unknown>;
+      }
+    ).request.bind(operations);
+    await expect(req('/x', {}, schema)).resolves.toBeUndefined();
+  });
+
+  it('maps only PENDING to pending; unknown or missing lintStatus is not pending', async () => {
+    const item = (id: string, lintStatus?: string) => ({
+      id,
+      name: id,
+      language: 'printscript',
+      ownerId: 'u',
+      lintStatus,
+    });
+    server.use(
+      http.get(`${BASE_URL}/snippets`, () =>
+        HttpResponse.json({
+          items: [item('a', 'PENDING'), item('b', 'WHATEVER'), item('c')],
+          page: 0,
+          size: 10,
+          total: 3,
+        }),
+      ),
+    );
+    const res = await operations.listSnippetDescriptors(0, 10);
+    expect(res.snippets.map((x) => x.compliance)).toEqual(['pending', 'failed', 'failed']);
   });
 
   it('getLintingRules queries /rules/printscript/lint and maps config to Rule[]', async () => {

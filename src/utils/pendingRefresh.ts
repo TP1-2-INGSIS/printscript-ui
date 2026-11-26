@@ -12,3 +12,11 @@ export const pendingRefetchInterval = (
   const list = Array.isArray(snippets) ? snippets : snippets ? [snippets] : [];
   return list.some(isPending) ? PENDING_REFRESH_MS : false;
 };
+
+type QueryLike = { state: { status: string } };
+
+/** Igual que pendingRefetchInterval, pero nunca hace polling si la query esta en error. */
+export const pendingRefetchIntervalUnlessError = (
+  snippets: Parameters<typeof pendingRefetchInterval>[0],
+  query: QueryLike,
+): number | false => (query.state.status === 'error' ? false : pendingRefetchInterval(snippets));

@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import { TestCase } from '../types/TestCase.ts';
 import { FileType } from '../types/FileType.ts';
 import { Rule } from '../types/Rule.ts';
-import { pendingRefetchInterval } from './pendingRefresh.ts';
+import { pendingRefetchIntervalUnlessError } from './pendingRefresh.ts';
 import { useAuth0 } from '@auth0/auth0-react';
 
 export type TokenProvider = () => Promise<string>;
@@ -38,7 +38,7 @@ export const useGetSnippets = (
   return useQuery<PaginatedSnippets, Error>(
     ['listSnippets', page, pageSize, filterOrName],
     () => snippetOperations.listSnippetDescriptors(page, pageSize, filterOrName),
-    { refetchInterval: (data) => pendingRefetchInterval(data?.snippets) },
+    { refetchInterval: (data, query) => pendingRefetchIntervalUnlessError(data?.snippets, query) },
   );
 };
 
@@ -50,7 +50,7 @@ export const useGetSnippetById = (id: string) => {
     () => snippetOperations.getSnippetById(id),
     {
       enabled: !!id, // This query will not execute until the id is provided
-      refetchInterval: (data) => pendingRefetchInterval(data),
+      refetchInterval: (data, query) => pendingRefetchIntervalUnlessError(data, query),
     },
   );
 };
