@@ -2,9 +2,13 @@ name: CI / CD
 
 on:
   pull_request:
+    branches:
+      - master
+      - dev
   push:
     branches:
       - master
+      - dev
       - 'feat/**'
       - 'feature/**'
 
@@ -28,10 +32,13 @@ jobs:
     name: Build & Publish Docker Image
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
     permissions:
       contents: read
       packages: write
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -51,8 +58,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest
-            type=sha,format=short
+            type=raw,value=dev,enable=${{ github.ref_name == 'dev' }}
+            type=sha,format=short,prefix=dev-,enable=${{ github.ref_name == 'dev' }}
+            type=raw,value=latest,enable=${{ github.ref_name != 'dev' }}
+            type=sha,format=short,prefix=,enable=${{ github.ref_name != 'dev' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -68,3 +77,37 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Deploy to the environment
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ github.ref_name == 'dev' && secrets.DEV_HOST || secrets.PROD_HOST }}
+          IMAGE_BASE: ghcr.io/tp1-2-ingsis/printscript-ui
+        run: |
+          # shellcheck disable=SC2029  # IMAGE is meant to expand locally
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "::notice::Deploy secrets (DEPLOY_SSH_KEY, DEPLOY_USER, DEV_HOST/PROD_HOST) are not set, skipping deploy"
+            exit 0
+          fi
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [ "$GITHUB_REF_NAME" = "dev" ]; then TAG="dev-$SHORT_SHA"; else TAG="$SHORT_SHA"; fi
+          IMAGE="$IMAGE_BASE:$TAG"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          trap 'rm -f ~/.ssh/deploy_key' EXIT
+          # Host key verification: use the pinned DEPLOY_KNOWN_HOSTS org secret when set.
+          # Otherwise trust-on-first-use via ssh-keyscan (still strict afterwards), with a warning.
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set, trusting the host key on first use (ssh-keyscan)"
+            ssh-keyscan "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          fi
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          TARGET="$DEPLOY_USER@$DEPLOY_HOST"
+          for svc in ui; do
+            ssh "${SSH_OPTS[@]}" "$TARGET" "docker service update --with-registry-auth --image $IMAGE snippet-searcher_$svc"
+          done
