@@ -295,7 +295,21 @@ export class HttpSnippetOperations implements SnippetOperations {
       return undefined as unknown as T;
     }
 
-    const rawData: unknown = await response.json();
+    let rawData: unknown;
+    if (response.status === 202) {
+      // 202 Accepted: el backend procesa en segundo plano; el body es opcional.
+      const text = await response.text();
+      try {
+        rawData = text ? JSON.parse(text) : undefined;
+      } catch {
+        rawData = undefined;
+      }
+      if (!schema) {
+        return rawData as T;
+      }
+    } else {
+      rawData = await response.json();
+    }
 
     if (schema) {
       const parseResult = schema.safeParse(rawData);

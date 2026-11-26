@@ -469,6 +469,21 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     expect(result).toEqual(newRules);
   });
 
+  it.each([
+    ['with body', () => HttpResponse.json({ kind: 'FORMAT', queued: 3 }, { status: 202 })],
+    ['without body', () => new HttpResponse(null, { status: 202 })],
+    ['with non-JSON body', () => new HttpResponse('accepted', { status: 202 })],
+  ])('modifyFormatRule and modifyLintingRule treat 202 %s as success', async (_n, resp) => {
+    server.use(
+      http.put(`${BASE_URL}/rules/printscript/format`, resp),
+      http.put(`${BASE_URL}/rules/printscript/lint`, resp),
+    );
+    const rules = [{ id: '1', name: 'indentSize', isActive: true, value: 2 }];
+
+    await expect(operations.modifyFormatRule(rules)).resolves.toEqual(rules);
+    await expect(operations.modifyLintingRule(rules)).resolves.toEqual(rules);
+  });
+
   it('getLintingRules queries /rules/printscript/lint and maps config to Rule[]', async () => {
     server.use(
       http.get(`${BASE_URL}/rules/printscript/lint`, () => {
