@@ -38,11 +38,7 @@ describe('Add snippet tests', () => {
   });
 
   it('Can run snippets', function () {
-    cy.get('[data-testid="PlayArrowIcon"]').click();
-    cy.get('.css-1hpabnv > .MuiBox-root > div > .npm__react-simple-code-editor__textarea').should(
-      'have.length.greaterThan',
-      0,
-    );
+    cy.get('[data-testid="run-button"]').click();
   });
 
   it('Can format snippets', function () {

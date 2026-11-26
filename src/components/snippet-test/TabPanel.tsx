@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TestCase } from '../../types/TestCase.ts';
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -20,6 +21,17 @@ type TabPanelProps = {
   setTestCase: (test: Partial<TestCase>) => void;
   removeTestCase?: (testIndex: string) => void;
 };
+
+const OutputList = ({ lines }: { lines: string[] }) =>
+  lines.length === 0 ? (
+    <Typography variant="body2" color="text.secondary">
+      (no output)
+    </Typography>
+  ) : (
+    <Box component="pre" sx={{ m: 0, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+      {lines.join('\n')}
+    </Box>
+  );
 
 export const TabPanel = ({
   value,
@@ -119,13 +131,22 @@ export const TabPanel = ({
             >
               Test
             </Button>
-            {data &&
-              (data === 'success' ? (
-                <Chip label="Pass" color="success" />
-              ) : (
-                <Chip label="Fail" color="error" />
-              ))}
+            {data && (
+              <Chip
+                label={data.status === 'success' ? 'Pass' : 'Fail'}
+                color={data.status === 'success' ? 'success' : 'error'}
+              />
+            )}
           </Box>
+          {data && (
+            <Box display="flex" flexDirection="column" gap={1} data-testid="test-result">
+              {data.errorMessage && <Alert severity="error">{data.errorMessage}</Alert>}
+              <Typography fontWeight="bold">Expected output</Typography>
+              <OutputList lines={data.expectedOutputs} />
+              <Typography fontWeight="bold">Actual output</Typography>
+              <OutputList lines={data.actualOutputs} />
+            </Box>
+          )}
         </Box>
       )}
     </div>

@@ -763,7 +763,12 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     );
 
     const result = await operations.testSnippet({ id: 'test-1' });
-    expect(result).toBe('success');
+    expect(result).toEqual({
+      status: 'success',
+      expectedOutputs: ['3'],
+      actualOutputs: ['3'],
+      errorMessage: undefined,
+    });
   });
 
   it('removeTestCase throws when no snippetId is provided or active', async () => {
@@ -776,11 +781,11 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
   it('testSnippet returns fail when no snippetId or testCase.id is provided', async () => {
     const unattachedOps = new HttpSnippetOperations(BASE_URL, async () => 'token');
     const result1 = await unattachedOps.testSnippet({ id: 'test-1' });
-    expect(result1).toBe('fail');
+    expect(result1).toEqual({ status: 'fail', expectedOutputs: [], actualOutputs: [] });
 
     operations.setActiveSnippetId('snippet-123');
     const result2 = await operations.testSnippet({});
-    expect(result2).toBe('fail');
+    expect(result2.status).toBe('fail');
   });
 
   it('getTestCases returns empty array when no snippetId is active or provided', async () => {
@@ -810,7 +815,30 @@ describe('HttpSnippetOperations - Phase 1: CRUD Operations', () => {
     );
 
     const result = await operations.testSnippet({ id: 'test-fail' });
-    expect(result).toBe('fail');
+    expect(result.status).toBe('fail');
+    expect(result.expectedOutputs).toEqual(['1']);
+    expect(result.actualOutputs).toEqual(['2']);
+  });
+
+  it('testSnippet keeps the error message and defaults missing outputs', async () => {
+    operations.setActiveSnippetId('snippet-123');
+    server.use(
+      http.post(`${BASE_URL}/snippets/snippet-123/tests/test-err/run`, () => {
+        return HttpResponse.json({
+          testId: 'test-err',
+          status: 'ERROR',
+          errorMessage: 'Syntax error at line 1',
+        });
+      }),
+    );
+
+    const result = await operations.testSnippet({ id: 'test-err' });
+    expect(result).toEqual({
+      status: 'fail',
+      expectedOutputs: [],
+      actualOutputs: [],
+      errorMessage: 'Syntax error at line 1',
+    });
   });
 
   it('getSnippetById rethrows non-404 errors', async () => {

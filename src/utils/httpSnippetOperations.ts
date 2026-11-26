@@ -97,6 +97,7 @@ export const BackendTestRunResultSchema = z.object({
   status: z.string(),
   expectedOutputs: z.array(z.string()).optional().default([]),
   actualOutputs: z.array(z.string()).optional().default([]),
+  errorMessage: z.string().nullish(),
 });
 
 export type BackendTestRunResult = z.infer<typeof BackendTestRunResultSchema>;
@@ -699,7 +700,7 @@ export class HttpSnippetOperations implements SnippetOperations {
   async testSnippet(testCase: Partial<TestCase>, snippetId?: string): Promise<TestCaseResult> {
     const targetId = snippetId || this.activeSnippetId;
     if (!targetId || !testCase.id) {
-      return 'fail';
+      return { status: 'fail', expectedOutputs: [], actualOutputs: [] };
     }
 
     const result = await this.request<BackendTestRunResult>(
@@ -710,6 +711,11 @@ export class HttpSnippetOperations implements SnippetOperations {
       BackendTestRunResultSchema,
     );
 
-    return result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail';
+    return {
+      status: result.status.toUpperCase() === 'PASSED' ? 'success' : 'fail',
+      expectedOutputs: result.expectedOutputs,
+      actualOutputs: result.actualOutputs,
+      errorMessage: result.errorMessage ?? undefined,
+    };
   }
 }
